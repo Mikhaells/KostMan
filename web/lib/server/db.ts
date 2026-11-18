@@ -1,9 +1,8 @@
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
 import { Pool, type PoolClient, types } from 'pg'
 import { randomUUID } from 'node:crypto'
 import { config } from './config'
 import { encrypt, hashPassword, sha256 } from './crypto'
+import { SCHEMA_SQL } from './schema'
 
 // Go's BIGINT/NUMERIC come back as strings by default; the UI expects numbers.
 types.setTypeParser(20, (value) => Number(value))
@@ -96,9 +95,8 @@ async function prepare(): Promise<void> {
     try {
       const applied = await client.query(`SELECT 1 FROM kosman_schema_migrations WHERE name='000001_init'`)
       if (!applied.rowCount) {
-        const schema = readFileSync(path.join(process.cwd(), 'db', 'schema.sql'), 'utf8')
         await client.query('BEGIN')
-        await client.query(schema)
+        await client.query(SCHEMA_SQL)
         await client.query(`INSERT INTO kosman_schema_migrations (name) VALUES ('000001_init')`)
         await client.query('COMMIT')
       }
