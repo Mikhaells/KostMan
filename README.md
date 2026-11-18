@@ -1,29 +1,25 @@
 # KosMan — Sistem Manajemen Kos & Kontrakan
 
-Implementasi lengkap MVP v1.0 sesuai [PRD.md](./PRD.md). Aplikasi aktif adalah **Next.js penuh** (UI + API + database) yang bisa di-deploy gratis ke **Vercel Hobby + Neon** tanpa kartu kredit.
+Implementasi lengkap MVP v1.0 sesuai [PRD.md](./PRD.md). Seluruh aplikasi (UI + API + database) ada di root repo ini dan bisa di-deploy gratis ke **Vercel Hobby + Neon** tanpa kartu kredit.
 
 ## Arsitektur
 
 ```
 .
-├── web/                       APLIKASI AKTIF — Next.js 14 App Router
-│   ├── app/
-│   │   ├── [[...slug]]/        SPA shell (semua rute UI)
-│   │   ├── api/v1/[...path]/   dispatcher ~72 endpoint API
-│   │   ├── api/cron/[job]/     scheduled job (Vercel Cron)
-│   │   ├── app-entry.tsx       dynamic import SPA (ssr: false)
-│   │   └── spa.tsx             QueryClient + BrowserRouter + App
-│   ├── db/schema.sql          skema Postgres idempoten
-│   ├── lib/server/            config, db, JWT, crypto, HTTP, PDF, notifikasi
-│   ├── lib/services/          logika bisnis (hasil port dari Go)
-│   ├── src/                   UI React (dipakai ulang dari frontend/)
-│   ├── public/                aset statis
-│   ├── .env.example           contoh environment
-│   └── vercel.json            jadwal cron harian & bulanan
-├── backend/                   LEGACY — referensi Go (Chi, sqlx, cron, SMTP)
-├── frontend/                  LEGACY — referensi Vite (sumber web/src/)
-├── Dockerfile, render.yaml    LEGACY — opsi deploy lama
-└── docker-compose.yml         LEGACY — Postgres + Mailpit untuk development
+├── app/
+│   ├── [[...slug]]/          SPA shell (semua rute UI)
+│   ├── api/v1/[...path]/     dispatcher ~72 endpoint API
+│   ├── api/cron/[job]/       scheduled job (Vercel Cron)
+│   ├── app-entry.tsx         dynamic import SPA (ssr: false)
+│   └── spa.tsx               QueryClient + BrowserRouter + App
+├── db/schema.sql             skema Postgres idempoten (sumber)
+├── lib/server/               config, db, JWT, crypto, HTTP, PDF, notifikasi, skema embed
+├── lib/services/             logika bisnis (hasil port dari Go)
+├── src/                      UI React (dipakai ulang dari versi Vite)
+├── public/                   aset statis
+├── .env.example              contoh environment
+├── vercel.json               jadwal cron harian & bulanan
+└── PRD.md                    dokumen produk
 ```
 
 UI dan API berada di **satu origin**: `/api/v1/...`. Response envelope tetap kompatibel:
@@ -38,20 +34,19 @@ UI dan API berada di **satu origin**: `/api/v1/...`. Response envelope tetap kom
 - Node.js 20+ dan npm
 - PostgreSQL 15+ (lokal) **atau** akun Neon gratis untuk produksi
 
-Tidak perlu Go, Docker, atau kartu kredit untuk menjalankan aplikasi aktif.
+Tidak perlu Go, Docker, atau kartu kredit untuk menjalankan aplikasi ini.
 
 ## Menjalankan lokal
 
 ```bash
-cd web
-cp .env.example .env.local        # sesuaikan DATABASE_URL bila perlu
+cp .env.example .env.local      # sesuaikan DATABASE_URL bila perlu
 npm install
-npm run dev                       # http://localhost:3000
+npm run dev                     # http://localhost:3000
 ```
 
 `DATABASE_URL` lokal default: `postgres://postgres:password@127.0.0.1:5432/kosman?sslmode=disable`.
 
-Skema dan data contoh dibuat **otomatis pada request pertama** (migrasi dengan advisory lock, seed idempoten). Seed dilewati bila tabel `users` sudah berisi data, jadi tidak menimpa database yang sudah dipakai.
+Skema dan data contoh dibuat **otomatis pada request pertama** (migrasi dengan advisory lock, seed idempoten). Seed dilewati bila tabel `users` sudah berisi data, jadi tidak menimpa database yang sudah dipakai. Skema juga di-embed di `lib/server/schema.ts` supaya tetap bekerja di filesystem serverless Vercel yang read-only.
 
 Login seed (password semua `Admin123`):
 
@@ -66,13 +61,12 @@ Login seed (password semua `Admin123`):
 Perintah lain:
 
 ```bash
-cd web
 npm run typecheck               # tsc --noEmit
 npm run build                   # next build
 npm start                       # jalankan build produksi di :3000
 ```
 
-## Deploy gratis: Vercel Hobby + Neon ✅
+## Deploy gratis: Vercel Hobby + Neon
 
 ### 1. Neon (database, gratis tanpa kartu)
 
@@ -85,7 +79,7 @@ npm start                       # jalankan build produksi di :3000
 
 1. Push repo ke GitHub (`Mikhaells/KostMan`).
 2. <https://vercel.com/new> → **Import Project** → pilih repo.
-3. Set **Root Directory = `web`**. Framework terdeteksi sebagai Next.js; build command `npm run build`, output `.next`.
+3. **Root Directory = `.` (kosongkan)** karena aplikasi sudah ada di root. Framework terdeteksi sebagai Next.js; build command `npm run build`, output `.next`.
 4. Isi **Environment Variables** (Production + Preview):
 
 | Variable | Nilai |
@@ -117,7 +111,7 @@ npm start                       # jalankan build produksi di :3000
 
 ### 4. Cron / auto-billing
 
-`web/vercel.json` mendaftarkan dua scheduled job (Vercel Cron tersedia di semua plan, termasuk Hobby):
+`vercel.json` mendaftarkan dua scheduled job (Vercel Cron tersedia di semua plan, termasuk Hobby):
 
 | Jadwal (UTC) | Endpoint | Tugas |
 | :--- | :--- | :--- |
@@ -157,7 +151,7 @@ Tombol **Generate tagihan** di halaman Tagihan juga memanggil fungsi bulanan yan
 
 ## API
 
-Semua endpoint berada di prefix `/api/v1` (same-origin). Dokumentasi OpenAPI lama ada di [`backend/docs/openapi.yaml`](./backend/docs/openapi.yaml) — sebagian besar endpoint identik setelah port.
+Semua endpoint berada di prefix `/api/v1` (same-origin). Daftar endpoint dapat dilihat dari dispatcher di [`app/api/v1/[...path]/route.ts`](./app/api/v1/[...path]/route.ts).
 
 Ringkasan hak akses:
 
@@ -176,19 +170,9 @@ Penyewa hanya melihat tagihan/kontrak/tiket miliknya (scoping di service, bukan 
 - NIK dienkripsi AES-256-GCM at-rest; hash NIK tidak dikirim ke klien.
 - Query parametrized, CORS, batas ukuran upload, endpoint cron dilindungi secret.
 
-## Deploy legacy (referensi, tidak disarankan)
-
-Folder `backend/`, `frontend/`, `Dockerfile`, `render.yaml`, dan `docker-compose.yml` dipertahankan sebagai **cadangan/referensi** dari arsitektur Go + Vite. Panduan lama (Go binary, Docker, Render Blueprint, Zeabur) sengaja tidak dipakai lagi karena:
-
-- Butuh build Go + Node sekaligus dan proses yang terus hidup (tidak cocok untuk serverless gratis).
-- Render meminta verifikasi kartu untuk web service tertentu.
-- Versi Next.js di `web/` menyatukan UI, API, migrasi, dan cron dalam satu deployment.
-
-Bila ingin memakai kembali jalur lama, lihat riwayat commit sebelum port Next.js.
-
 ## Catatan
 
-- Port `3000` dipakai Next.js; port `8081` dulu dipakai backend Go/httpd.
+- Port `3000` dipakai Next.js; port `8081` dulu dipakai backend Go/httpd (folder legacy sudah dihapus).
 - UI tetap bahasa Indonesia dan responsif; seluruh halaman lama dipakai ulang tanpa rewrite.
 - Data URL hasil upload tersimpan di kolom teks; untuk produksi dengan banyak gambar, sebaiknya aktifkan Cloudinary.
-- Migrasi idempoten: `web/db/schema.sql` aman dijalankan berulang kali.
+- Migrasi idempoten: `db/schema.sql` aman dijalankan berulang kali.

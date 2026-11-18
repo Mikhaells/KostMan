@@ -1,7 +1,7 @@
 import PDFDocument from 'pdfkit'
 
 /**
- * Sederhana pengganti backend/internal/pdf (gofpdf): A4, Helvetica, tabel
+ * Generator PDF ringan (pengganti gofpdf): A4, Helvetica, tabel
  * berbasis doc.text dengan kolom tetap. Mengembalikan Buffer PDF.
  */
 
