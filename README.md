@@ -1,60 +1,57 @@
 # KosMan — Sistem Manajemen Kos & Kontrakan
 
-Implementasi lengkap MVP v1.0 sesuai [PRD.md](./PRD.md): backend Go + PostgreSQL dan frontend React + TypeScript.
+Implementasi lengkap MVP v1.0 sesuai [PRD.md](./PRD.md). Aplikasi aktif adalah **Next.js penuh** (UI + API + database) yang bisa di-deploy gratis ke **Vercel Hobby + Neon** tanpa kartu kredit.
 
 ## Arsitektur
 
 ```
 .
-├── backend/                 Go 1.22+, Chi, sqlx/pgx, JWT, cron, zerolog
-│   ├── cmd/server           entrypoint API + static file server
-│   ├── cmd/migrate          runner migrasi SQL
-│   ├── cmd/seed             data contoh
-│   ├── internal/config      konfigurasi env
-│   ├── internal/database    koneksi & migrasi
-│   ├── internal/model       model domain + tipe jsonb
-│   ├── internal/service     aturan bisnis per modul
-│   ├── internal/handler     HTTP handler + router
-│   ├── internal/middleware  JWT auth, RBAC, rate limit
-│   ├── internal/job         cron (auto-billing, overdue, reminder)
-│   ├── internal/mailer      SMTP (gomail)
-│   ├── internal/storage     upload lokal + validasi MIME
-│   ├── internal/pdf         invoice, kontrak, laporan
-│   ├── migrations           skema PostgreSQL 15
-│   └── docs/openapi.yaml    dokumentasi API
-├── frontend/                React 18 + Vite + TypeScript + Tailwind
-│   └── src
-│       ├── components/ui    komponen UI reusable
-│       ├── components/layout shell, sidebar, navbar
-│       ├── features        halaman per modul (feature-based)
-│       ├── lib             API client, formatter, helper
-│       ├── store           Zustand auth store
-│       └── types           tipe domain
-├── docker-compose.yml       PostgreSQL 15 + Mailpit
-└── .env.example             contoh environment
+├── web/                       APLIKASI AKTIF — Next.js 14 App Router
+│   ├── app/
+│   │   ├── [[...slug]]/        SPA shell (semua rute UI)
+│   │   ├── api/v1/[...path]/   dispatcher ~72 endpoint API
+│   │   ├── api/cron/[job]/     scheduled job (Vercel Cron)
+│   │   ├── app-entry.tsx       dynamic import SPA (ssr: false)
+│   │   └── spa.tsx             QueryClient + BrowserRouter + App
+│   ├── db/schema.sql          skema Postgres idempoten
+│   ├── lib/server/            config, db, JWT, crypto, HTTP, PDF, notifikasi
+│   ├── lib/services/          logika bisnis (hasil port dari Go)
+│   ├── src/                   UI React (dipakai ulang dari frontend/)
+│   ├── public/                aset statis
+│   ├── .env.example           contoh environment
+│   └── vercel.json            jadwal cron harian & bulanan
+├── backend/                   LEGACY — referensi Go (Chi, sqlx, cron, SMTP)
+├── frontend/                  LEGACY — referensi Vite (sumber web/src/)
+├── Dockerfile, render.yaml    LEGACY — opsi deploy lama
+└── docker-compose.yml         LEGACY — Postgres + Mailpit untuk development
 ```
 
-Backend disajikan sebagai **satu binary**: API, file upload, dan build frontend (`go:embed` digantikan dengan static file server yang melayani `frontend/dist`).
+UI dan API berada di **satu origin**: `/api/v1/...`. Response envelope tetap kompatibel:
+
+```json
+{ "success": true, "message": "OK", "data": {...}, "meta": {...} }
+{ "success": false, "message": "Pesan error", "error": "Pesan error", "code": "BAD_REQUEST" }
+```
 
 ## Prasyarat
 
-- Node.js 20+ & npm
-- Go 1.22+
-- PostgreSQL 15 (bisa via Docker) **atau** jalankan `docker compose up -d`
+- Node.js 20+ dan npm
+- PostgreSQL 15+ (lokal) **atau** akun Neon gratis untuk produksi
 
-## Menjalankan backend
+Tidak perlu Go, Docker, atau kartu kredit untuk menjalankan aplikasi aktif.
+
+## Menjalankan lokal
 
 ```bash
-cp .env.example .env
-docker compose up -d                # Postgres :5432, Mailpit :1025 / UI :8025
-
-cd backend
-cp .env.example .env                # sesuaikan DATABASE_URL bila perlu
-go mod tidy
-make migrate-up                     # atau: go run ./cmd/migrate up
-make seed                           # data contoh (opsional)
-make run                            # http://localhost:8081
+cd web
+cp .env.example .env.local        # sesuaikan DATABASE_URL bila perlu
+npm install
+npm run dev                       # http://localhost:3000
 ```
+
+`DATABASE_URL` lokal default: `postgres://postgres:password@127.0.0.1:5432/kosman?sslmode=disable`.
+
+Skema dan data contoh dibuat **otomatis pada request pertama** (migrasi dengan advisory lock, seed idempoten). Seed dilewati bila tabel `users` sudah berisi data, jadi tidak menimpa database yang sudah dipakai.
 
 Login seed (password semua `Admin123`):
 
@@ -64,158 +61,134 @@ Login seed (password semua `Admin123`):
 | Manager | `manager@kosman.id` |
 | Penyewa | `penyewa1@kosman.id`, `penyewa2@kosman.id`, `penyewa3@kosman.id` |
 
-## Menjalankan frontend
+> **Segera ganti password seed** sebelum dipakai untuk data nyata.
+
+Perintah lain:
 
 ```bash
-cd frontend
-npm install
-npm run dev                         # http://localhost:5173
+cd web
+npm run typecheck               # tsc --noEmit
+npm run build                   # next build
+npm start                       # jalankan build produksi di :3000
 ```
 
-Buat `frontend/.env` jika API tidak di `localhost:8080`:
+## Deploy gratis: Vercel Hobby + Neon ✅
 
-```
-VITE_API_URL=http://localhost:8081/api/v1
-```
+### 1. Neon (database, gratis tanpa kartu)
 
-Untuk build produksi yang dilayani backend:
+1. Daftar di <https://neon.com>, buat project dan database.
+2. Salin connection string pooler dengan `sslmode=require`, misalnya:
+   `postgres://<user>:<pass>@<host-pooler>/<db>?sslmode=require`
+3. Tidak perlu menjalankan migrasi manual — aplikasi membuat skema + seed otomatis saat request pertama.
+
+### 2. Vercel
+
+1. Push repo ke GitHub (`Mikhaells/KostMan`).
+2. <https://vercel.com/new> → **Import Project** → pilih repo.
+3. Set **Root Directory = `web`**. Framework terdeteksi sebagai Next.js; build command `npm run build`, output `.next`.
+4. Isi **Environment Variables** (Production + Preview):
+
+| Variable | Nilai |
+| :--- | :--- |
+| `DATABASE_URL` | connection string Neon di atas |
+| `APP_URL` | `https://<nama-project>.vercel.app` (atau domain kustom) |
+| `JWT_SECRET` | string acak ≥ 32 karakter |
+| `JWT_REFRESH_SECRET` | string acak berbeda ≥ 32 karakter |
+| `ENCRYPTION_KEY` | string acak ketiga ≥ 32 karakter |
+| `CRON_SECRET` | string acak untuk mengamankan endpoint cron |
+| `SMTP_FROM` | `KosMan <noreply@domain-anda.com>` (opsional) |
+| `RESEND_API_KEY` | API key Resend (opsional) |
+| `CLOUDINARY_CLOUD_NAME` | nama cloud Cloudinary (opsional) |
+| `CLOUDINARY_UPLOAD_PRESET` | unsigned upload preset (opsional) |
+
+   Buat secret acak di PowerShell:
+
+   ```powershell
+   -join ((1..64) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
+   ```
+
+5. Deploy. Buka URL Vercel, login `owner@kosman.id` / `Admin123`, lalu **ganti password**.
+
+### 3. Email & upload (opsional, tetap gratis)
+
+- **Resend** (<https://resend.com>): pakai HTTPS API, cocok untuk serverless. Tanpa `RESEND_API_KEY`, email tidak dikirim tetapi seluruh alur aplikasi tetap berjalan.
+- **Cloudinary** (<https://cloudinary.com>): buat *unsigned upload preset*. Tanpa ini, upload disimpan sebagai **data URL** di database sehingga tetap bekerja di filesystem serverless yang read-only (perhatikan batas ukuran data URL).
+- Ukuran upload dibatasi `MAX_UPLOAD_MB` (default 5 MB).
+
+### 4. Cron / auto-billing
+
+`web/vercel.json` mendaftarkan dua scheduled job (Vercel Cron tersedia di semua plan, termasuk Hobby):
+
+| Jadwal (UTC) | Endpoint | Tugas |
+| :--- | :--- | :--- |
+| `0 0 * * *` | `/api/cron/daily` | tandai tagihan terlambat + denda, selesaikan kontrak expired, reminder H-3, notifikasi kontrak H-7 |
+| `0 0 1 * *` | `/api/cron/monthly` | generate tagihan bulanan untuk kontrak aktif |
+
+Vercel mengirim `Authorization: Bearer <CRON_SECRET>`; endpoint menolak request tanpa otorisasi. Untuk uji manual:
 
 ```bash
-cd frontend && npm run build
-cd ../backend && make run
+curl -H "Authorization: Bearer $CRON_SECRET" https://<nama-project>.vercel.app/api/cron/daily
 ```
 
-Buka `http://localhost:8081` — SPA dilayani langsung oleh Go.
+Tombol **Generate tagihan** di halaman Tagihan juga memanggil fungsi bulanan yang sama secara manual.
 
-> Port `8081` dipakai karena `8080` sudah dipakai proses `httpd` di mesin lokal. Ubah `APP_PORT`, `APP_URL`, dan `VITE_API_URL` bila ingin port lain.
+### Keterbatasan tier gratis
+
+- Vercel Hobby dan Neon Free tidak meminta kartu kredit untuk pemakaian personal.
+- Function Vercel bisa cold start beberapa detik setelah idle; Neon compute juga suspend setelah idle (bangun < 1 detik).
+- Resend free biasanya membatasi jumlah email per hari; Cloudinary free punya kuota storage/bandwidth.
+- Neon Free: 1 GB storage dan 100 CU-hours per bulan.
 
 ## Modul yang tersedia
 
 | Modul | Fitur utama |
 | :--- | :--- |
-| Auth & RBAC | register, login, refresh token, reset password, lock 5x gagal, manajemen user |
-| Properti | CRUD, soft delete + restore, foto (maks 10), fasilitas, status |
-| Kamar | CRUD, harga (snapshot di kontrak), status otomatis, unique nomor per properti |
-| Penyewa | CRUD, NIK terenkripsi AES-256, KTP wajib, akun portal, riwayat sewa |
-| Kontrak | nomor otomatis, perpanjangan, pengakhiran, PDF, reminder H-7 |
+| Auth & RBAC | register, login, refresh token rotation, reset password, lock 5x gagal, manajemen user |
+| Properti | CRUD, soft delete + restore, foto, fasilitas, status |
+| Kamar | CRUD, harga (snapshot di kontrak), status, unique nomor per properti |
+| Penyewa | CRUD, NIK terenkripsi AES-256-GCM, KTP wajib, akun portal, riwayat sewa |
+| Kontrak | nomor otomatis, perpanjangan, pengakhiran, PDF |
 | Tagihan | invoice otomatis & manual, item tambahan, denda, void, PDF, cron overdue |
 | Pembayaran | bukti transfer, verifikasi/tolak, partial payment, cash manual |
-| Tiket | keluhan penyewa, prioritas (urgent merah), status, resolusi, notifikasi |
+| Tiket | keluhan penyewa, prioritas, status, resolusi, notifikasi |
 | Dashboard & laporan | KPI, grafik 6 bulan, okupansi, 5 laporan, export XLSX/PDF |
-| Notifikasi | in-app + badge, email SMTP, template per event |
-| Pengaturan | profil, rekening, aturan denda, template, reminder, branding |
-
-## Cron job
-
-- `0 0 * * *` — tandai tagihan terlambat + denda, selesaikan kontrak expired, reminder H-3, kontrak H-7
-- `0 0 1 * *` — generate tagihan bulanan otomatis untuk semua kontrak aktif
-
-Matikan dengan `CRON_ENABLED=false`.
+| Notifikasi | in-app + badge, email via Resend |
+| Pengaturan | rekening bank, aturan denda, template, reminder, branding |
 
 ## API
 
-Dokumentasi OpenAPI: [`backend/docs/openapi.yaml`](./backend/docs/openapi.yaml).
-Semua endpoint berada di prefix `/api/v1`. Response konsisten:
+Semua endpoint berada di prefix `/api/v1` (same-origin). Dokumentasi OpenAPI lama ada di [`backend/docs/openapi.yaml`](./backend/docs/openapi.yaml) — sebagian besar endpoint identik setelah port.
 
-```json
-{ "success": true, "message": "OK", "data": {...}, "meta": {...} }
-```
+Ringkasan hak akses:
 
-Error:
+- **Public**: register, login, refresh, forgot/reset password.
+- **Authenticated**: profil, notifikasi, data diri penyewa, tagihan & kontrak sendiri, tiket, upload.
+- **Owner/Manager/Super Admin**: kamar, penyewa, kontrak, tagihan, pembayaran, tiket.
+- **Owner/Super Admin**: properti, user, dashboard, laporan, pengaturan.
 
-```json
-{ "success": false, "message": "Pesan error", "code": "BAD_REQUEST" }
-```
+Penyewa hanya melihat tagihan/kontrak/tiket miliknya (scoping di service, bukan hanya di UI).
 
 ## Keamanan
 
-- Password bcrypt cost 12; JWT access 24 jam + refresh 7 hari (rotation)
-- Akun terkunci 15 menit setelah 5 kali login gagal
-- RBAC: super_admin / owner / manager / tenant, pengecekan di middleware & service
-- NIK dienkripsi AES-256-GCM at-rest; upload divalidasi MIME & ukuran
-- Rate limit 100 req/menit untuk endpoint publik, CORS, parameterized query
+- Password bcrypt cost 12; JWT access (default 24 jam) + refresh (7 hari) dengan rotation.
+- Akun terkunci 15 menit setelah 5 kali login gagal.
+- RBAC `super_admin` / `owner` / `manager` / `tenant` dicek di dispatcher **dan** service.
+- NIK dienkripsi AES-256-GCM at-rest; hash NIK tidak dikirim ke klien.
+- Query parametrized, CORS, batas ukuran upload, endpoint cron dilindungi secret.
 
-## Testing
+## Deploy legacy (referensi, tidak disarankan)
 
-```bash
-cd backend && go test ./... -cover
-cd frontend && npm run lint && npm run build
-```
+Folder `backend/`, `frontend/`, `Dockerfile`, `render.yaml`, dan `docker-compose.yml` dipertahankan sebagai **cadangan/referensi** dari arsitektur Go + Vite. Panduan lama (Go binary, Docker, Render Blueprint, Zeabur) sengaja tidak dipakai lagi karena:
 
-## Deploy tanpa kartu kredit: Zeabur + Neon ✅
+- Butuh build Go + Node sekaligus dan proses yang terus hidup (tidak cocok untuk serverless gratis).
+- Render meminta verifikasi kartu untuk web service tertentu.
+- Versi Next.js di `web/` menyatukan UI, API, migrasi, dan cron dalam satu deployment.
 
-Kalau Anda tidak ingin memasukkan kartu (Render sekarang meminta verifikasi `$1`), pakai **Zeabur Free Plan** — dokumentasi resminya menyebut *"No credit card required — just sign up and start deploying"*. Database tetap di **Neon**.
-
-File `Dockerfile` di root sudah menangani semuanya: build Vite + Go, lalu Go menyajikan API **dan** SPA di satu container. Migrasi dan seed dijalankan otomatis saat container start (seed idempoten, jadi aman dijalankan ulang).
-
-### Langkah
-
-1. Buat project Neon dan salin connection string dengan `sslmode=require` (sama seperti langkah di bawah).
-2. Daftar di <https://zeabur.com> → **New Project** → **Deploy Service** → pilih repo GitHub `Mikhaells/KostMan`.
-3. Zeabur mendeteksi `Dockerfile` di root secara otomatis — tidak perlu mengubah build command.
-4. Di tab **Environment Variables**, tambahkan sebagai *secret*:
-   - `DATABASE_URL` = connection string Neon
-   - `APP_URL` = URL yang diberikan Zeabur (mis. `https://kosman.zeabur.app`)
-   - `JWT_SECRET`, `JWT_REFRESH_SECRET`, `ENCRYPTION_KEY` = string acak panjang
-   - `SMTP_FROM` = `KosMan <noreply@domain-anda.com>` (opsional)
-   - `RESEND_API_KEY`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET` (opsional)
-5. Deploy → buka URL Zeabur → login `owner@kosman.id` / `Admin123`.
-
-Buat secret acak di PowerShell:
-
-```powershell
--join ((1..64) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
-```
-
-### Keterbatasan Zeabur Free
-
-- Service **auto-sleep** saat idle dan bangun saat ada request (cold start beberapa detik).
-- Tidak ada SLA dan email bawaan Zeabur tidak tersedia — tapi email pakai Resend dan database Anda di Neon, jadi tidak terdampak.
-- Domain kustom tidak tersedia di plan Free; gunakan URL `*.zeabur.app`.
-
-## Deploy gratis: Render + Neon
-
-Proyek ini sudah disiapkan untuk deploy sebagai **satu web service** di Render: Go melayani API **dan** SPA (`frontend/dist`), jadi tidak perlu hosting frontend terpisah. `render.yaml` di root sudah berisi blueprint-nya.
-
-### 1. Database Neon (gratis permanen)
-
-1. Daftar di <https://neon.com>, buat project, salin connection string (`sslmode=require`).
-2. Migrasi dijalankan otomatis saat server start, dan **seed data contoh dijalankan otomatis sekali** lewat `initialDeployHook` di `render.yaml` (Render free tidak menyediakan shell).
-
-Seed **aman dijalankan ulang**: jika database sudah berisi user, seed otomatis dilewati sehingga data produksi tidak terhapus. Untuk mengulang seed dari laptop:
-
-```powershell
-cd backend
-$env:DATABASE_URL='postgres://<user>:<pass>@<host>/<db>?sslmode=require'
-go run ./cmd/seed
-```
-
-Gunakan `$env:FORCE_SEED='true'` hanya jika Anda sengaja ingin menghapus semua data contoh dan mengisinya ulang.
-
-### 2. Email & upload (disarankan)
-
-- **Resend** (<https://resend.com>): buat API key → `RESEND_API_KEY`, verifikasi domain → `SMTP_FROM`. Render memblokir SMTP port 25/465/587, jadi backend memakai HTTPS API saat `RESEND_API_KEY` diisi.
-- **Cloudinary** (<https://cloudinary.com>): buat *unsigned upload preset* → isi `CLOUDINARY_CLOUD_NAME` dan `CLOUDINARY_UPLOAD_PRESET`. Tanpa ini, upload tetap berfungsi tetapi file hilang saat Render restart (filesystem bersifat ephemeral).
-
-### 3. Deploy
-
-1. Push project ke GitHub.
-2. Render Dashboard → **New → Blueprint** → pilih repo → `render.yaml` terdeteksi otomatis.
-3. Isi environment variable bertanda `sync: false`: `DATABASE_URL`, `APP_URL` (`https://<nama>.onrender.com`), `SMTP_FROM`, `RESEND_API_KEY`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET`.
-4. `JWT_SECRET`, `JWT_REFRESH_SECRET`, dan `ENCRYPTION_KEY` dibuat otomatis oleh Render.
-5. Klik **Deploy**. Build command akan menjalankan `npm ci`, `npm run build`, lalu `go build`.
-
-Setelah seed berjalan, login dengan `owner@kosman.id` (atau `manager@kosman.id`, `penyewa1@kosman.id`) / password **`Admin123`**. Segera ganti password tersebut untuk penggunaan nyata.
-
-### Keterbatasan tier gratis
-
-- Render menghentikan web service setelah 15 menit tanpa traffic; bangun lagi ±1 menit.
-- Neon men-suspend compute setelah 5 menit idle; bangun lagi dalam <1 detik.
-- `CRON_ENABLED=false` di `render.yaml` karena proses dapat tidur. Gunakan scheduler eksternal (mis. cron-job.org memanggil endpoint) jika penagihan otomatis diperlukan.
-- Neon free: 1 GB storage dan 100 CU-hours per bulan.
+Bila ingin memakai kembali jalur lama, lihat riwayat commit sebelum port Next.js.
 
 ## Catatan
 
-- Email saat development tidak benar-benar dikirim bila `SMTP_HOST=localhost` (hanya log). Gunakan Mailpit di `localhost:1025` dan lihat inbox di `http://localhost:8025`.
-- File upload disimpan di `backend/uploads` dan di-serve melalui `/uploads/...` untuk lokal. Jika `CLOUDINARY_CLOUD_NAME` dan `CLOUDINARY_UPLOAD_PRESET` diisi, upload otomatis ke Cloudinary dan URL absolut disimpan (cocok untuk Render yang filesystem-nya ephemeral).
-- Untuk produksi: set `APP_ENV=production`, ganti semua secret, aktifkan HTTPS, dan arahkan `DATABASE_URL` ke instance Postgres dengan backup harian.
+- Port `3000` dipakai Next.js; port `8081` dulu dipakai backend Go/httpd.
+- UI tetap bahasa Indonesia dan responsif; seluruh halaman lama dipakai ulang tanpa rewrite.
+- Data URL hasil upload tersimpan di kolom teks; untuk produksi dengan banyak gambar, sebaiknya aktifkan Cloudinary.
+- Migrasi idempoten: `web/db/schema.sql` aman dijalankan berulang kali.

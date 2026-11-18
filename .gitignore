@@ -10,6 +10,15 @@ build/
 .env.*.local
 backend/.env
 frontend/.env
+web/.env
+web/.env.local
+web/.env.*.local
+
+# Next.js build output
+web/.next/
+web/out/
+web/next-env.d.ts
+*.tsbuildinfo
 
 # uploads & generated files
 backend/uploads/*
