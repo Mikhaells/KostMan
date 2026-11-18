@@ -1,0 +1,45 @@
+# Deploy blueprint untuk Render (free web service).
+# DATABASE_URL diisi manual dengan connection string Neon (sslmode=require).
+services:
+  - type: web
+    name: kosman
+    runtime: go
+    plan: free
+    region: singapore
+    rootDir: backend
+    healthCheckPath: /
+    buildCommand: |
+      cd ../frontend
+      npm ci
+      VITE_API_URL=/api/v1 npm run build
+      cd ../backend
+      go build -o bin/server ./cmd/server
+      go build -o bin/seed ./cmd/seed
+    startCommand: ./bin/server
+    # Isi data contoh sekali setelah deploy pertama (akses seed tidak tersedia di free plan)
+    initialDeployHook: ./bin/seed
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: SMTP_FROM
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_UPLOAD_PRESET
+        sync: false
+      - key: CRON_ENABLED
+        value: "false"
+      - key: FRONTEND_DIST
+        value: ../frontend/dist

@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+vendor/
+dist/
+build/
+
+# environment
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+
+# uploads & generated files
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/bin/
+backend/tmp/
+
+# logs
+*.log
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# installer / binary lokal
+*.exe
+*.msi
+*.zip

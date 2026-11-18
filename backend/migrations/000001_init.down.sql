@@ -1,0 +1,25 @@
+DROP TRIGGER IF EXISTS trg_tickets_updated ON tickets;
+DROP TRIGGER IF EXISTS trg_payments_updated ON payments;
+DROP TRIGGER IF EXISTS trg_invoices_updated ON invoices;
+DROP TRIGGER IF EXISTS trg_contracts_updated ON contracts;
+DROP TRIGGER IF EXISTS trg_tenants_updated ON tenants;
+DROP TRIGGER IF EXISTS trg_rooms_updated ON rooms;
+DROP TRIGGER IF EXISTS trg_properties_updated ON properties;
+DROP TRIGGER IF EXISTS trg_users_updated ON users;
+
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS settings;
+DROP TABLE IF EXISTS bank_accounts;
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS tickets;
+DROP TABLE IF EXISTS payments;
+DROP TABLE IF EXISTS invoices;
+DROP TABLE IF EXISTS contracts;
+DROP TABLE IF EXISTS tenants;
+DROP TABLE IF EXISTS rooms;
+DROP TABLE IF EXISTS properties;
+DROP TABLE IF EXISTS password_resets;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS users;
+DROP TYPE IF EXISTS user_role;
+DROP FUNCTION IF EXISTS set_updated_at();

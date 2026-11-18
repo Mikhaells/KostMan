@@ -1,0 +1,570 @@
+openapi: 3.0.3
+info:
+  title: KosMan API
+  version: 1.0.0
+  description: API untuk Sistem Manajemen Kos & Kontrakan (MVP v1.0).
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local development
+tags:
+  - name: Auth
+  - name: Users
+  - name: Properties
+  - name: Rooms
+  - name: Tenants
+  - name: Contracts
+  - name: Billing
+  - name: Payments
+  - name: Tickets
+  - name: Reports
+  - name: Notifications
+  - name: Settings
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string }
+        code: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, example: 86400 }
+        user: { type: object }
+    Property:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nama: { type: string }
+        tipe: { type: string, enum: [kos_putri, kos_putra, kos_campur, kontrakan, rumah] }
+        alamat: { type: string }
+        kota: { type: string }
+        provinsi: { type: string }
+        status: { type: string, enum: [aktif, nonaktif, maintenance] }
+        fasilitas: { type: array, items: { type: string } }
+        foto: { type: array, items: { type: string } }
+    Room:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        properti_id: { type: string, format: uuid }
+        nomor: { type: string }
+        tipe: { type: string }
+        harga_bulanan: { type: integer, format: int64 }
+        status: { type: string, enum: [kosong, terisi, maintenance, reserved] }
+    Invoice:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nomor_invoice: { type: string, example: INV-202611-0001 }
+        total: { type: integer, format: int64 }
+        status: { type: string, enum: [draft, terkirim, dibayar, sebagian, terlambat, batal] }
+        tanggal_jatuh_tempo: { type: string, format: date }
+
+security:
+  - bearerAuth: []
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Registrasi owner/manager
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nama, email, password]
+              properties:
+                nama: { type: string }
+                email: { type: string }
+                password: { type: string, description: "Minimal 8 karakter, huruf + angka" }
+                no_hp: { type: string }
+                role: { type: string, enum: [owner, manager] }
+      responses:
+        "201": { description: User dibuat }
+        "400": { description: Validasi gagal, $ref: '#/components/schemas/Error' }
+        "409": { description: Email duplikat }
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login email & password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        "200":
+          description: Token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        "401": { description: Kredensial salah / akun terkunci }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Perbarui access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200": { description: Token pair baru }
+        "401": { description: Refresh token tidak valid }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Kirim tautan reset password via email
+      security: []
+      responses:
+        "200": { description: Selalu sukses (tidak membocorkan akun) }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Set password baru dari token reset
+      security: []
+      responses:
+        "200": { description: Password diubah }
+        "400": { description: Token invalid/kedaluwarsa }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Cabut refresh token
+      responses:
+        "200": { description: Logout berhasil }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Profil user saat ini
+      responses:
+        "200": { description: Data user }
+    put:
+      tags: [Auth]
+      summary: Update profil
+      responses:
+        "200": { description: Profil diperbarui }
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Ganti password
+      responses:
+        "200": { description: Password diubah }
+
+  /users:
+    get:
+      tags: [Users]
+      summary: Daftar user (owner/super admin)
+      parameters:
+        - { in: query, name: page, schema: { type: integer, default: 1 } }
+        - { in: query, name: limit, schema: { type: integer, default: 20 } }
+        - { in: query, name: search, schema: { type: string } }
+      responses:
+        "200": { description: Daftar user + meta }
+    post:
+      tags: [Users]
+      summary: Buat user manager
+      responses:
+        "201": { description: User dibuat }
+  /users/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [Users]
+      summary: Update user
+      responses:
+        "200": { description: User diperbarui }
+    delete:
+      tags: [Users]
+      summary: Soft delete user
+      responses:
+        "204": { description: Berhasil }
+
+  /properties:
+    get:
+      tags: [Properties]
+      summary: Daftar properti
+      responses:
+        "200": { description: Daftar properti }
+    post:
+      tags: [Properties]
+      summary: Tambah properti
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Property' }
+      responses:
+        "201": { description: Properti dibuat }
+  /properties/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Properties]
+      summary: Detail properti
+      responses:
+        "200": { description: Detail properti }
+    put:
+      tags: [Properties]
+      summary: Update properti
+      responses:
+        "200": { description: Properti diperbarui }
+    delete:
+      tags: [Properties]
+      summary: Soft delete properti (gagal jika ada kontrak aktif)
+      responses:
+        "204": { description: Berhasil }
+        "409": { description: Masih ada kontrak aktif }
+  /properties/deleted:
+    get:
+      tags: [Properties]
+      summary: Properti terhapus (super admin)
+      responses:
+        "200": { description: Daftar properti terhapus }
+  /properties/{id}/restore:
+    post:
+      tags: [Properties]
+      summary: Pulihkan properti
+      responses:
+        "200": { description: Properti dipulihkan }
+
+  /properties/{id}/rooms:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Rooms]
+      summary: Kamar dalam properti
+      responses:
+        "200": { description: Daftar kamar }
+    post:
+      tags: [Rooms]
+      summary: Tambah kamar
+      responses:
+        "201": { description: Kamar dibuat }
+  /rooms/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Rooms]
+      summary: Detail kamar
+      responses:
+        "200": { description: Detail kamar }
+    put:
+      tags: [Rooms]
+      summary: Update kamar (harga tidak retroaktif)
+      responses:
+        "200": { description: Kamar diperbarui }
+    delete:
+      tags: [Rooms]
+      summary: Hapus kamar (gagal jika ada kontrak aktif)
+      responses:
+        "204": { description: Berhasil }
+  /rooms/{id}/status:
+    patch:
+      tags: [Rooms]
+      summary: Ubah status kamar
+      responses:
+        "200": { description: Status diperbarui }
+
+  /tenants:
+    get:
+      tags: [Tenants]
+      summary: Daftar penyewa
+      responses:
+        "200": { description: Daftar penyewa }
+    post:
+      tags: [Tenants]
+      summary: Daftarkan penyewa baru
+      responses:
+        "201": { description: Penyewa dibuat }
+  /tenants/me:
+    get:
+      tags: [Tenants]
+      summary: Profil penyewa (portal)
+      responses:
+        "200": { description: Profil penyewa }
+  /tenants/{id}:
+    parameters:
+      - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [Tenants]
+      summary: Detail penyewa
+      responses:
+        "200": { description: Detail penyewa }
+    put:
+      tags: [Tenants]
+      summary: Update penyewa
+      responses:
+        "200": { description: Penyewa diperbarui }
+  /tenants/{id}/history:
+    get:
+      tags: [Tenants]
+      summary: Riwayat sewa penyewa
+      responses:
+        "200": { description: Riwayat kontrak }
+  /tenants/{id}/portal-user:
+    post:
+      tags: [Tenants]
+      summary: Buat akun login portal penyewa
+      responses:
+        "200": { description: Akun dibuat }
+
+  /contracts:
+    get:
+      tags: [Contracts]
+      summary: Daftar kontrak (penyewa melihat miliknya)
+      responses:
+        "200": { description: Daftar kontrak }
+    post:
+      tags: [Contracts]
+      summary: Buat kontrak (status kamar otomatis terisi)
+      responses:
+        "201": { description: Kontrak dibuat }
+        "409": { description: Kamar sudah punya kontrak aktif }
+  /contracts/{id}/renew:
+    post:
+      tags: [Contracts]
+      summary: Perpanjang kontrak
+      responses:
+        "200": { description: Kontrak baru dibuat }
+  /contracts/{id}/terminate:
+    post:
+      tags: [Contracts]
+      summary: Akhiri kontrak lebih awal
+      responses:
+        "200": { description: Kontrak diakhiri }
+  /contracts/{id}/pdf:
+    get:
+      tags: [Contracts]
+      summary: Unduh PDF kontrak
+      responses:
+        "200":
+          description: File PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  /invoices:
+    get:
+      tags: [Billing]
+      summary: Daftar tagihan (penyewa melihat miliknya)
+      responses:
+        "200": { description: Daftar tagihan }
+    post:
+      tags: [Billing]
+      summary: Buat tagihan manual
+      responses:
+        "201": { description: Tagihan dibuat }
+  /invoices/generate:
+    post:
+      tags: [Billing]
+      summary: Generate tagihan bulanan otomatis
+      responses:
+        "200": { description: Jumlah tagihan dibuat }
+  /invoices/{id}:
+    get:
+      tags: [Billing]
+      summary: Detail tagihan
+      responses:
+        "200": { description: Detail tagihan, $ref: '#/components/schemas/Invoice' }
+    put:
+      tags: [Billing]
+      summary: Update item/denda tagihan (total dihitung ulang)
+      responses:
+        "200": { description: Tagihan diperbarui }
+  /invoices/{id}/void:
+    post:
+      tags: [Billing]
+      summary: Batalkan tagihan
+      responses:
+        "200": { description: Tagihan dibatalkan }
+  /invoices/{id}/pdf:
+    get:
+      tags: [Billing]
+      summary: Unduh PDF invoice
+      responses:
+        "200":
+          description: File PDF
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  /invoices/{id}/payments:
+    post:
+      tags: [Payments]
+      summary: Upload bukti pembayaran (penyewa)
+      responses:
+        "201": { description: Pembayaran pending }
+  /invoices/{id}/payments/cash:
+    post:
+      tags: [Payments]
+      summary: Catat pembayaran cash terverifikasi (admin)
+      responses:
+        "201": { description: Pembayaran terverifikasi }
+  /payments:
+    get:
+      tags: [Payments]
+      summary: Daftar pembayaran
+      responses:
+        "200": { description: Daftar pembayaran }
+  /payments/{id}/verify:
+    post:
+      tags: [Payments]
+      summary: Verifikasi pembayaran (update status tagihan otomatis)
+      responses:
+        "200": { description: Pembayaran diverifikasi }
+  /payments/{id}/reject:
+    post:
+      tags: [Payments]
+      summary: Tolak bukti pembayaran
+      responses:
+        "200": { description: Pembayaran ditolak }
+
+  /tickets:
+    get:
+      tags: [Tickets]
+      summary: Daftar tiket (penyewa hanya miliknya)
+      responses:
+        "200": { description: Daftar tiket }
+    post:
+      tags: [Tickets]
+      summary: Ajukan tiket keluhan (penyewa)
+      responses:
+        "201": { description: Tiket dibuat }
+  /tickets/stats:
+    get:
+      tags: [Tickets]
+      summary: Statistik tiket
+      responses:
+        "200": { description: Statistik tiket }
+  /tickets/{id}:
+    get:
+      tags: [Tickets]
+      summary: Detail tiket
+      responses:
+        "200": { description: Detail tiket }
+    patch:
+      tags: [Tickets]
+      summary: Update status/resolusi tiket (admin)
+      responses:
+        "200": { description: Tiket diperbarui }
+
+  /dashboard:
+    get:
+      tags: [Reports]
+      summary: KPI dashboard owner
+      responses:
+        "200": { description: Ringkasan KPI & grafik }
+  /reports/{kind}:
+    parameters:
+      - { in: path, name: kind, required: true, schema: { type: string, enum: [pendapatan, okupansi, tunggakan, penyewa, maintenance] } }
+      - { in: query, name: from, schema: { type: string, format: date } }
+      - { in: query, name: to, schema: { type: string, format: date } }
+      - { in: query, name: properti_id, schema: { type: string, format: uuid } }
+    get:
+      tags: [Reports]
+      summary: Data laporan
+      responses:
+        "200": { description: Header + baris laporan }
+  /reports/{kind}/export:
+    parameters:
+      - { in: path, name: kind, required: true, schema: { type: string } }
+      - { in: query, name: format, schema: { type: string, enum: [xlsx, pdf], default: xlsx } }
+    get:
+      tags: [Reports]
+      summary: Export laporan
+      responses:
+        "200":
+          description: File laporan
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+            application/pdf:
+              schema: { type: string, format: binary }
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: Daftar notifikasi in-app
+      responses:
+        "200": { description: Daftar notifikasi }
+  /notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Jumlah notifikasi belum dibaca
+      responses:
+        "200": { description: "{ count: number }" }
+  /notifications/{id}/read:
+    patch:
+      tags: [Notifications]
+      summary: Tandai notifikasi dibaca
+      responses:
+        "200": { description: Berhasil }
+  /notifications/read-all:
+    patch:
+      tags: [Notifications]
+      summary: Tandai semua dibaca
+      responses:
+        "200": { description: Berhasil }
+
+  /settings:
+    get:
+      tags: [Settings]
+      summary: Semua pengaturan owner
+      responses:
+        "200": { description: Key-value pengaturan }
+  /settings/{key}:
+    put:
+      tags: [Settings]
+      summary: Simpan pengaturan
+      responses:
+        "200": { description: Pengaturan disimpan }
+  /settings/banks:
+    get:
+      tags: [Settings]
+      summary: Rekening tujuan pembayaran
+      responses:
+        "200": { description: Daftar rekening }
+    post:
+      tags: [Settings]
+      summary: Tambah rekening
+      responses:
+        "201": { description: Rekening dibuat }
+  /settings/banks/{id}:
+    delete:
+      tags: [Settings]
+      summary: Hapus rekening
+      responses:
+        "204": { description: Berhasil }
+
+  /upload:
+    post:
+      tags: [Settings]
+      summary: Upload file (multipart/form-data, field: file)
+      responses:
+        "201": { description: "{ url: string, nama: string }" }
