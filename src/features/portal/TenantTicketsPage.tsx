@@ -75,7 +75,7 @@ export default function TenantTicketsPage() {
                       <StatusBadge status={ticket.prioritas} />
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-slate-500">{ticket.deskripsi}</p>
-                    <p className="mt-1 text-xs text-slate-400">{ticket.nomor_tiket} Â· {timeAgo(ticket.created_at)}</p>
+                    <p className="mt-1 text-xs text-slate-400">{ticket.nomor_tiket} · {timeAgo(ticket.created_at)}</p>
                   </div>
                 </button>
               ))}
@@ -93,7 +93,7 @@ export default function TenantTicketsPage() {
       >
         <div className="space-y-4">
           <Field label="Judul keluhan" required><Input value={form.judul} onChange={(event) => setForm((prev) => ({ ...prev, judul: event.target.value }))} placeholder="Contoh: Kran air bocor" /></Field>
-          <Field label="Deskripsi" required><Textarea value={form.deskripsi} onChange={(event) => setForm((prev) => ({ ...prev, deskripsi: event.target.value }))} placeholder="Jelaskan kondisi dan lokasi masalahâ€¦" /></Field>
+          <Field label="Deskripsi" required><Textarea value={form.deskripsi} onChange={(event) => setForm((prev) => ({ ...prev, deskripsi: event.target.value }))} placeholder="Jelaskan kondisi dan lokasi masalah…" /></Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Kategori">
               <Select value={form.kategori} onChange={(event) => setForm((prev) => ({ ...prev, kategori: event.target.value }))}>
@@ -111,7 +111,7 @@ export default function TenantTicketsPage() {
           <Field label="Foto (maks. 3)" hint="Bantu pengelola memahami masalah">
             <Input type="file" accept="image/*" multiple onChange={(event) => handleUpload(event.target.files)} />
           </Field>
-          {uploading && <p className="text-xs text-brand-600">Mengunggah fotoâ€¦</p>}
+          {uploading && <p className="text-xs text-brand-600">Mengunggah foto…</p>}
           {form.foto.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {form.foto.map((url) => <img key={url} src={fileUrl(url)} alt="Foto keluhan" className="h-16 w-16 rounded-lg object-cover" />)}
@@ -125,7 +125,7 @@ export default function TenantTicketsPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2"><StatusBadge status={detail.status} /><StatusBadge status={detail.prioritas} /></div>
             <p className="text-sm leading-relaxed text-slate-600">{detail.deskripsi}</p>
-            <p className="text-xs text-slate-400">{detail.nomor_tiket} Â· Dibuat {formatDateTime(detail.created_at)}</p>
+            <p className="text-xs text-slate-400">{detail.nomor_tiket} · Dibuat {formatDateTime(detail.created_at)}</p>
             {detail.foto.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {detail.foto.map((url) => <a key={url} href={fileUrl(url)} target="_blank" rel="noreferrer"><img src={fileUrl(url)} alt="Foto keluhan" className="h-24 w-24 rounded-lg object-cover" /></a>)}

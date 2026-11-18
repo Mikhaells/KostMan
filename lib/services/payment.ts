@@ -1,7 +1,7 @@
 import { exec, query, queryOne, scalar } from '@/lib/server/db'
 import { badRequest, conflict, forbidden, internal, notFound, type Paginated, type Pagination } from '@/lib/server/http'
 import { mail, notifyAdmins, notifyTenantUser } from '@/lib/server/notify'
-import { optional, parseDate } from '@/lib/server/util'
+import { optional, parseDate, scopeOwner } from '@/lib/server/util'
 
 const allowedPaymentMethods = ['transfer_bank', 'cash', 'ewallet']
 
@@ -17,9 +17,11 @@ export async function listPayments(
   invoiceID: string,
   status: string,
   q: Pagination,
+  ownerID: string,
 ): Promise<Paginated<any>> {
   const conditions: string[] = ['1=1']
   const args: unknown[] = []
+  scopeOwner(conditions, args, ownerID, 'p.owner_id')
   if (invoiceID) {
     args.push(invoiceID)
     conditions.push('p.tagihan_id = $1')
@@ -38,16 +40,23 @@ export async function listPayments(
   return { items, total }
 }
 
-export async function getPayment(id: string): Promise<any> {
-  const row = await queryOne(
-    `SELECT p.*, i.nomor_invoice FROM payments p JOIN invoices i ON i.id=p.tagihan_id WHERE p.id=$1`,
-    [id],
-  )
+export async function getPayment(id: string, ownerID = ''): Promise<any> {
+  const args: unknown[] = [id]
+  let sql = `SELECT p.*, i.nomor_invoice FROM payments p JOIN invoices i ON i.id=p.tagihan_id WHERE p.id=$1`
+  if (ownerID) {
+    sql += ` AND p.owner_id=$2`
+    args.push(ownerID)
+  }
+  const row = await queryOne(sql, args)
   if (!row) throw notFound('Pembayaran tidak ditemukan')
   return row
 }
 
-async function canAccess(userID: string, role: string, invoiceID: string): Promise<void> {
+async function canAccess(userID: string, role: string, invoiceID: string, ownerID: string): Promise<void> {
+  if (ownerID) {
+    const invOwner = await scalar<string>(`SELECT coalesce(owner_id::text,'') FROM invoices WHERE id=$1`, [invoiceID])
+    if (!invOwner || String(invOwner) !== String(ownerID)) throw forbidden('Tagihan bukan milik Anda')
+  }
   if (role === 'tenant') {
     const owner = await scalar<string>(
       `SELECT coalesce(user_id::text,'') FROM tenants WHERE id=(SELECT penyewa_id FROM invoices WHERE id=$1)`,
@@ -99,8 +108,9 @@ export async function createPayment(
   role: string,
   input: any,
   isAdmin: boolean,
+  ownerID: string,
 ): Promise<any> {
-  await canAccess(userID, role, String(input?.tagihan_id ?? ''))
+  await canAccess(userID, role, String(input?.tagihan_id ?? ''), ownerID)
 
   const jumlah = Number(input?.jumlah ?? 0)
   if (jumlah <= 0) throw badRequest('Jumlah pembayaran harus lebih dari 0')
@@ -117,7 +127,13 @@ export async function createPayment(
     // Go: tanggal kosong/invalid -> timeNowUTC()
   }
 
-  const inv = await queryOne(`SELECT * FROM invoices WHERE id=$1`, [input?.tagihan_id])
+  const invArgs: unknown[] = [input?.tagihan_id]
+  let invSql = `SELECT * FROM invoices WHERE id=$1`
+  if (ownerID) {
+    invSql += ` AND owner_id=$2`
+    invArgs.push(ownerID)
+  }
+  const inv = await queryOne(invSql, invArgs)
   if (!inv) throw notFound('Tagihan tidak ditemukan')
   if (inv.status === 'batal' || inv.status === 'dibayar') {
     throw conflict('Tagihan tidak menerima pembayaran baru')
@@ -129,9 +145,10 @@ export async function createPayment(
   let payment: any
   try {
     payment = await queryOne(
-      `INSERT INTO payments (tagihan_id, jumlah, metode, bukti_bayar, tanggal_bayar, status, diverifikasi_oleh, catatan_admin)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      `INSERT INTO payments (owner_id, tagihan_id, jumlah, metode, bukti_bayar, tanggal_bayar, status, diverifikasi_oleh, catatan_admin)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [
+        ownerID || inv.owner_id || null,
         input.tagihan_id,
         jumlah,
         metode,
@@ -156,16 +173,17 @@ export async function createPayment(
         `Pembayaran untuk invoice ${inv.nomor_invoice} menunggu verifikasi.`,
         'payment_pending',
         { tagihan_id: input.tagihan_id },
+        ownerID,
       )
     } catch {
       // NotifyAdmins di Go tidak Mengembalikan galat
     }
   }
-  return getPayment(payment.id)
+  return getPayment(payment.id, ownerID)
 }
 
-export async function verifyPayment(id: string, adminID: string): Promise<any> {
-  const payment = await getPayment(id)
+export async function verifyPayment(id: string, adminID: string, ownerID: string): Promise<any> {
+  const payment = await getPayment(id, ownerID)
   if (payment.status === 'verified') throw conflict('Pembayaran sudah diverifikasi')
 
   try {
@@ -198,11 +216,11 @@ export async function verifyPayment(id: string, adminID: string): Promise<any> {
   } catch {
     // Go mengabaikan galat notifikasi
   }
-  return getPayment(id)
+  return getPayment(id, ownerID)
 }
 
-export async function rejectPayment(id: string, adminID: string, reason: string): Promise<any> {
-  await getPayment(id)
+export async function rejectPayment(id: string, adminID: string, reason: string, ownerID: string): Promise<any> {
+  await getPayment(id, ownerID)
   if (String(reason ?? '').trim() === '') throw badRequest('Alasan penolakan wajib diisi')
   try {
     await exec(`UPDATE payments SET status='rejected', diverifikasi_oleh=$1, catatan_admin=$2 WHERE id=$3`, [
@@ -213,5 +231,5 @@ export async function rejectPayment(id: string, adminID: string, reason: string)
   } catch (error) {
     throw internalError(error)
   }
-  return getPayment(id)
+  return getPayment(id, ownerID)
 }

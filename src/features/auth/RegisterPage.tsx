@@ -4,12 +4,12 @@ import { useMutation } from '@tanstack/react-query'
 import { AlertCircle, UserPlus } from 'lucide-react'
 import { api, errorMessage } from '../../lib/api'
 import type { User } from '../../types'
-import { Button, Field, Input, PasswordInput, Select } from '../../components/ui'
+import { Button, Field, Input, PasswordInput } from '../../components/ui'
 import AuthLayout from './AuthLayout'
 
 export default function RegisterPage() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ nama: '', email: '', no_hp: '', password: '', role: 'owner' })
+  const [form, setForm] = useState({ nama: '', email: '', no_hp: '', password: '' })
   const set = (key: string, value: string) => setForm((prev) => ({ ...prev, [key]: value }))
 
   const mutation = useMutation({
@@ -20,7 +20,7 @@ export default function RegisterPage() {
   return (
     <AuthLayout
       title="Buat akun baru"
-      subtitle="Registrasi tersedia untuk pemilik kos dan staf pengelola."
+      subtitle="Buat akun pemilik kos. Manager dan penyewa ditambahkan oleh owner."
       footer={<>Sudah punya akun? <Link to="/login" className="font-semibold text-brand-600 hover:underline">Masuk</Link></>}
     >
       <form
@@ -38,12 +38,6 @@ export default function RegisterPage() {
         <Field label="Nama lengkap" required><Input value={form.nama} onChange={(e) => set('nama', e.target.value)} placeholder="Nama Anda" required /></Field>
         <Field label="Email" required><Input type="email" value={form.email} onChange={(e) => set('email', e.target.value)} placeholder="nama@email.com" required /></Field>
         <Field label="No. HP"><Input value={form.no_hp} onChange={(e) => set('no_hp', e.target.value)} placeholder="08xxxxxxxxxx" /></Field>
-        <Field label="Role" required>
-          <Select value={form.role} onChange={(e) => set('role', e.target.value)}>
-            <option value="owner">Pemilik Kos (Owner)</option>
-            <option value="manager">Staf Pengelola (Manager)</option>
-          </Select>
-        </Field>
         <Field label="Password" required hint="Minimal 8 karakter, kombinasi huruf dan angka">
           <PasswordInput value={form.password} onChange={(e) => set('password', e.target.value)} minLength={8} required />
         </Field>

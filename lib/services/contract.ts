@@ -3,7 +3,7 @@ import { decrypt } from '@/lib/server/crypto'
 import { exec, query, queryOne, scalar, withTx } from '@/lib/server/db'
 import { badRequest, conflict, internal, isUniqueViolation, notFound, type Paginated, type Pagination } from '@/lib/server/http'
 import { contractPdfBuffer } from '@/lib/server/pdf'
-import { addDays, isoDate, nextNumber, optional, parseDate } from '@/lib/server/util'
+import { addDays, isoDate, nextNumber, optional, parseDate, scopeOwner } from '@/lib/server/util'
 
 const CONTRACT_SELECT = `SELECT c.*, t.nama_lengkap AS nama_penyewa, r.nomor AS nomor_kamar, p.nama AS nama_properti
   FROM contracts c JOIN tenants t ON t.id=c.penyewa_id JOIN rooms r ON r.id=c.kamar_id JOIN properties p ON p.id=r.properti_id`
@@ -37,9 +37,11 @@ export async function listContracts(
   propertyID: string,
   status: string,
   q: Pagination,
+  ownerID: string,
 ): Promise<Paginated<any>> {
   const conditions: string[] = ['1=1']
   const args: unknown[] = []
+  scopeOwner(conditions, args, ownerID, 'c.owner_id')
   const add = (column: string, value: string) => {
     if (value) {
       args.push(value)
@@ -61,26 +63,41 @@ export async function listContracts(
   return { items, total }
 }
 
-export async function getContract(id: string): Promise<any> {
-  const row = await queryOne(`${CONTRACT_SELECT} WHERE c.id=$1`, [id])
+export async function getContract(id: string, ownerID = ''): Promise<any> {
+  const args: unknown[] = [id]
+  let sql = `${CONTRACT_SELECT} WHERE c.id=$1`
+  if (ownerID) {
+    sql += ` AND c.owner_id=$2`
+    args.push(ownerID)
+  }
+  const row = await queryOne(sql, args)
   if (!row) throw notFound('Kontrak tidak ditemukan')
   return row
 }
 
-export async function createContract(createdBy: string, input: any): Promise<any> {
+export async function createContract(createdBy: string, input: any, ownerID: string): Promise<any> {
   const start = parseDate(String(input?.tanggal_mulai ?? ''))
   const end = parseDate(String(input?.tanggal_selesai ?? ''))
   if (!(end > start)) throw badRequest('Tanggal selesai harus setelah tanggal mulai')
   if (end < addMonths(start, 1)) throw badRequest('Kontrak minimal 1 bulan')
 
-  const tenant = await queryOne<{ foto_ktp: string | null }>(
-    `SELECT coalesce(foto_ktp,'') AS foto_ktp FROM tenants WHERE id=$1`,
-    [input?.penyewa_id],
-  )
+  const tenantArgs: unknown[] = [input?.penyewa_id]
+  let tenantSql = `SELECT coalesce(foto_ktp,'') AS foto_ktp FROM tenants WHERE id=$1`
+  if (ownerID) {
+    tenantSql += ` AND owner_id=$2`
+    tenantArgs.push(ownerID)
+  }
+  const tenant = await queryOne<{ foto_ktp: string | null }>(tenantSql, tenantArgs)
   if (!tenant) throw badRequest('Penyewa tidak ditemukan')
   if (!tenant.foto_ktp) throw badRequest('Foto KTP penyewa wajib diunggah sebelum membuat kontrak')
 
-  const room = await queryOne(`SELECT * FROM rooms WHERE id=$1`, [input?.kamar_id])
+  const roomArgs: unknown[] = [input?.kamar_id]
+  let roomSql = `SELECT * FROM rooms WHERE id=$1`
+  if (ownerID) {
+    roomSql += ` AND owner_id=$2`
+    roomArgs.push(ownerID)
+  }
+  const room = await queryOne(roomSql, roomArgs)
   if (!room) throw badRequest('Kamar tidak ditemukan')
   if (room.status === 'maintenance') throw conflict('Kamar sedang dalam maintenance')
 
@@ -93,15 +110,16 @@ export async function createContract(createdBy: string, input: any): Promise<any
   const price = Number(input?.harga_sewa ?? 0) > 0 ? Number(input.harga_sewa) : Number(room.harga_bulanan ?? 0)
   const deposit = Number(input?.deposit ?? 0) > 0 ? Number(input.deposit) : Number(room.deposit ?? 0)
 
-  const number = await nextNumber('contracts', 'nomor_kontrak', `KTR-${yyyymm(start)}-`)
+  const number = await nextNumber('contracts', 'nomor_kontrak', `KTR-${yyyymm(start)}-`, ownerID)
 
   let created: any
   try {
     created = await queryOne(
-      `INSERT INTO contracts (nomor_kontrak, penyewa_id, kamar_id, tanggal_mulai, tanggal_selesai,
+      `INSERT INTO contracts (owner_id, nomor_kontrak, penyewa_id, kamar_id, tanggal_mulai, tanggal_selesai,
         harga_sewa, deposit, deposit_dibayar, status, catatan, dokumen_kontrak, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'aktif',$9,$10,$11) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'aktif',$10,$11,$12) RETURNING *`,
       [
+        ownerID || null,
         number,
         input.penyewa_id,
         input.kamar_id,
@@ -123,29 +141,36 @@ export async function createContract(createdBy: string, input: any): Promise<any
 
   await exec(`UPDATE rooms SET status='terisi' WHERE id=$1`, [input.kamar_id]).catch(() => undefined)
   await exec(`UPDATE tenants SET status='aktif' WHERE id=$1`, [input.penyewa_id]).catch(() => undefined)
-  return getContract(created.id)
+  return getContract(created.id, ownerID)
 }
 
-export async function renewContract(id: string, newEnd: string, createdBy: string): Promise<any> {
-  const old = await getContract(id)
+export async function renewContract(id: string, newEnd: string, createdBy: string, ownerID: string): Promise<any> {
+  const old = await getContract(id, ownerID)
   if (old.status !== 'aktif') throw conflict('Hanya kontrak aktif yang dapat diperpanjang')
 
   const end = parseDate(String(newEnd ?? ''))
   const start = isoDate(addDays(new Date(`${dateOnly(old.tanggal_selesai)}T00:00:00Z`), 1))
   if (!(end > start)) throw badRequest('Tanggal selesai baru harus setelah kontrak lama')
 
-  const room = await queryOne(`SELECT * FROM rooms WHERE id=$1`, [old.kamar_id])
+  const roomArgs: unknown[] = [old.kamar_id]
+  let roomSql = `SELECT * FROM rooms WHERE id=$1`
+  if (ownerID) {
+    roomSql += ` AND owner_id=$2`
+    roomArgs.push(ownerID)
+  }
+  const room = await queryOne(roomSql, roomArgs)
   if (!room) throw internalError(new Error('Kamar tidak ditemukan'))
 
-  const number = await nextNumber('contracts', 'nomor_kontrak', `KTR-${yyyymm(start)}-`)
+  const number = await nextNumber('contracts', 'nomor_kontrak', `KTR-${yyyymm(start)}-`, ownerID)
 
   const newId = await withTx(async (tx) => {
     await tx.exec(`UPDATE contracts SET status='diperpanjang' WHERE id=$1`, [old.id])
     const created = await tx.one(
-      `INSERT INTO contracts (nomor_kontrak, penyewa_id, kamar_id, tanggal_mulai, tanggal_selesai,
+      `INSERT INTO contracts (owner_id, nomor_kontrak, penyewa_id, kamar_id, tanggal_mulai, tanggal_selesai,
         harga_sewa, deposit, deposit_dibayar, status, catatan, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'aktif',$9,$10) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'aktif',$10,$11) RETURNING *`,
       [
+        ownerID || old.owner_id || null,
         number,
         old.penyewa_id,
         old.kamar_id,
@@ -165,11 +190,11 @@ export async function renewContract(id: string, newEnd: string, createdBy: strin
     throw internalError(error)
   })
 
-  return getContract(newId)
+  return getContract(newId, ownerID)
 }
 
-export async function terminateContract(id: string, status: string, note: string): Promise<any> {
-  const contract = await getContract(id)
+export async function terminateContract(id: string, status: string, note: string, ownerID: string): Promise<any> {
+  const contract = await getContract(id, ownerID)
   const finalStatus = status || 'selesai'
   if (finalStatus !== 'selesai' && finalStatus !== 'batal') throw badRequest('Status akhir kontrak tidak valid')
   if (contract.status !== 'aktif') throw conflict('Kontrak tidak dalam status aktif')
@@ -196,7 +221,7 @@ export async function terminateContract(id: string, status: string, note: string
   if (otherActive === 0) {
     await exec(`UPDATE tenants SET status='nonaktif' WHERE id=$1`, [contract.penyewa_id]).catch(() => undefined)
   }
-  return getContract(id)
+  return getContract(id, ownerID)
 }
 
 /** Job harian: kontrak aktif yang akan berakhir dalam <days> hari. */
@@ -232,8 +257,8 @@ export async function finalizeExpiredContracts(): Promise<number> {
   })
 }
 
-export async function contractPdf(id: string): Promise<{ bytes: Buffer; filename: string }> {
-  const contract = await getContract(id)
+export async function contractPdf(id: string, ownerID: string): Promise<{ bytes: Buffer; filename: string }> {
+  const contract = await getContract(id, ownerID)
   const tenant = await queryOne(`SELECT * FROM tenants WHERE id=$1`, [contract.penyewa_id])
   if (!tenant) throw internal('Penyewa tidak ditemukan')
 

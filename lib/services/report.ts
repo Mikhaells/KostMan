@@ -37,33 +37,42 @@ async function safeScalar(sql: string, params: unknown[] = []): Promise<number> 
   }
 }
 
-export async function dashboard(): Promise<Record<string, any>> {
+export async function dashboard(ownerID: string): Promise<Record<string, any>> {
   const out: Record<string, any> = {}
+  const args: unknown[] = ownerID ? [ownerID] : []
+  const own = (column: string) => (ownerID ? ` AND ${column}=$1` : '')
 
   out.pendapatan_bulan_ini = await safeScalar(
-    `SELECT coalesce(sum(jumlah),0) FROM payments WHERE status='verified' AND date_trunc('month', created_at) = date_trunc('month', now())`,
+    `SELECT coalesce(sum(jumlah),0) FROM payments WHERE status='verified' AND date_trunc('month', created_at) = date_trunc('month', now())${own('owner_id')}`,
+    args,
   )
   out.tagihan_belum_lunas = await safeScalar(
-    `SELECT coalesce(sum(total),0) FROM invoices WHERE status IN ('terkirim','terlambat','sebagian')`,
+    `SELECT coalesce(sum(total),0) FROM invoices WHERE status IN ('terkirim','terlambat','sebagian')${own('owner_id')}`,
+    args,
   )
 
-  const occupied = await safeScalar(`SELECT count(*) FROM rooms WHERE status='terisi'`)
-  const totalRooms = await safeScalar(`SELECT count(*) FROM rooms`)
+  const occupied = await safeScalar(`SELECT count(*) FROM rooms WHERE status='terisi'${own('owner_id')}`, args)
+  const totalRooms = await safeScalar(`SELECT count(*) FROM rooms WHERE 1=1${own('owner_id')}`, args)
   const occupancy = totalRooms > 0 ? (occupied / totalRooms) * 100 : 0
   out.okupansi = round2(occupancy)
   out.total_kamar = totalRooms
   out.kamar_terisi = occupied
 
-  out.penyewa_aktif = await safeScalar(`SELECT count(*) FROM contracts WHERE status='aktif'`)
-  out.tiket_open = await safeScalar(`SELECT count(*) FROM tickets WHERE status IN ('open','in_progress')`)
-  out.total_properti = await safeScalar(`SELECT count(*) FROM properties WHERE deleted_at IS NULL`)
-  out.total_penyewa = await safeScalar(`SELECT count(*) FROM tenants WHERE status='aktif'`)
+  out.penyewa_aktif = await safeScalar(`SELECT count(*) FROM contracts WHERE status='aktif'${own('owner_id')}`, args)
+  out.tiket_open = await safeScalar(
+    `SELECT count(*) FROM tickets WHERE status IN ('open','in_progress')${own('owner_id')}`, args,
+  )
+  out.total_properti = await safeScalar(
+    `SELECT count(*) FROM properties WHERE deleted_at IS NULL${own('owner_id')}`, args,
+  )
+  out.total_penyewa = await safeScalar(`SELECT count(*) FROM tenants WHERE status='aktif'${own('owner_id')}`, args)
 
   try {
     const rows = await query<{ bulan: string; total: number }>(
       `SELECT to_char(date_trunc('month', created_at), 'Mon YYYY') AS bulan, coalesce(sum(jumlah),0) AS total
-       FROM payments WHERE status='verified' AND created_at >= date_trunc('month', now()) - interval '5 months'
+       FROM payments WHERE status='verified' AND created_at >= date_trunc('month', now()) - interval '5 months'${own('owner_id')}
        GROUP BY date_trunc('month', created_at) ORDER BY date_trunc('month', created_at)`,
+      args,
     )
     out.grafik_pendapatan = rows.map((row) => ({ bulan: row.bulan, total: Number(row.total ?? 0) }))
   } catch {
@@ -75,7 +84,8 @@ export async function dashboard(): Promise<Record<string, any>> {
       `SELECT p.nama, count(r.id) AS total,
          count(r.id) FILTER (WHERE r.status='terisi') AS terisi
        FROM properties p LEFT JOIN rooms r ON r.properti_id=p.id
-       WHERE p.deleted_at IS NULL GROUP BY p.id, p.nama ORDER BY p.nama`,
+       WHERE p.deleted_at IS NULL${own('p.owner_id')} GROUP BY p.id, p.nama ORDER BY p.nama`,
+      args,
     )
     out.okupansi_per_properti = rows.map((row) => {
       const total = Number(row.total ?? 0)
@@ -99,6 +109,7 @@ async function reportTable(
   from: string,
   to: string,
   propertyID: string,
+  ownerID: string,
 ): Promise<{ table: ReportTable; title: string }> {
   const t: ReportTable = { Headers: [], Rows: [] }
 
@@ -109,8 +120,9 @@ async function reportTable(
         `SELECT i.nomor_invoice, tn.nama_lengkap, pr.nama, coalesce(to_char(p.tanggal_bayar,'YYYY-MM-DD'),'-'), p.jumlah, p.status
          FROM payments p JOIN invoices i ON i.id=p.tagihan_id JOIN tenants tn ON tn.id=i.penyewa_id JOIN properties pr ON pr.id=i.properti_id
          WHERE p.status='verified' AND p.tanggal_bayar BETWEEN $1 AND $2 AND ($3::uuid IS NULL OR i.properti_id=$3)
+         ${ownerID ? 'AND p.owner_id=$4' : ''}
          ORDER BY p.tanggal_bayar DESC`,
-        [from, to, uuidArg(propertyID)],
+        ownerID ? [from, to, uuidArg(propertyID), ownerID] : [from, to, uuidArg(propertyID)],
       )
       t.Rows = rows.map(cells)
       break
@@ -122,6 +134,10 @@ async function reportTable(
       if (propertyID) {
         sql += ` AND p.id=$1`
         params.push(propertyID)
+      }
+      if (ownerID) {
+        sql += ` AND r.owner_id=$${params.length + 1}`
+        params.push(ownerID)
       }
       sql += ` ORDER BY p.nama, r.nomor`
       const rows = await query(sql, params)
@@ -137,8 +153,10 @@ async function reportTable(
                 WHEN (now()::date - i.tanggal_jatuh_tempo) <= 60 THEN '31-60' ELSE '60+' END AS aging, i.status
            FROM invoices i JOIN tenants tn ON tn.id=i.penyewa_id
            WHERE i.status IN ('terkirim','terlambat','sebagian')
-             AND ($1::uuid IS NULL OR i.properti_id=$1) ORDER BY i.tanggal_jatuh_tempo`,
-        [uuidArg(propertyID)],
+             AND ($1::uuid IS NULL OR i.properti_id=$1)
+             ${ownerID ? 'AND i.owner_id=$2' : ''}
+             ORDER BY i.tanggal_jatuh_tempo`,
+        ownerID ? [uuidArg(propertyID), ownerID] : [uuidArg(propertyID)],
       )
       t.Rows = rows.map(cells)
       break
@@ -154,8 +172,9 @@ async function reportTable(
            WHERE ($1::uuid IS NULL OR EXISTS (
              SELECT 1 FROM contracts c JOIN rooms r ON r.id=c.kamar_id
              WHERE c.penyewa_id=tn.id AND r.properti_id=$1))
-           ORDER BY tn.nama_lengkap`,
-        [uuidArg(propertyID)],
+           ${ownerID ? 'AND tn.owner_id=$2' : ''}
+            ORDER BY tn.nama_lengkap`,
+        ownerID ? [uuidArg(propertyID), ownerID] : [uuidArg(propertyID)],
       )
       t.Rows = rows.map(cells)
       break
@@ -165,8 +184,9 @@ async function reportTable(
       const rows = await query(
         `SELECT nomor_tiket, judul, kategori, prioritas, status,
            to_char(created_at,'YYYY-MM-DD') AS dibuat, coalesce(to_char(resolved_at,'YYYY-MM-DD'),'-') AS selesai
-           FROM tickets WHERE ($1::uuid IS NULL OR properti_id=$1) ORDER BY created_at DESC`,
-        [uuidArg(propertyID)],
+           FROM tickets WHERE ($1::uuid IS NULL OR properti_id=$1)
+           ${ownerID ? 'AND owner_id=$2' : ''} ORDER BY created_at DESC`,
+        ownerID ? [uuidArg(propertyID), ownerID] : [uuidArg(propertyID)],
       )
       t.Rows = rows.map(cells)
       break
@@ -183,8 +203,9 @@ export async function reportData(
   from: string,
   to: string,
   propertyID: string,
+  ownerID: string,
 ): Promise<{ Headers: string[]; Rows: (string | number)[][] }> {
-  const { table } = await reportTable(kind, from, to, propertyID)
+  const { table } = await reportTable(kind, from, to, propertyID, ownerID)
   return table
 }
 
@@ -194,8 +215,9 @@ export async function exportReport(
   to: string,
   propertyID: string,
   format: 'pdf' | 'xlsx',
+  ownerID: string,
 ): Promise<{ bytes: Buffer; filename: string; contentType: string }> {
-  const { table, title } = await reportTable(kind, from, to, propertyID)
+  const { table, title } = await reportTable(kind, from, to, propertyID, ownerID)
   const now = new Date()
   const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
 

@@ -45,6 +45,16 @@ export function round2(value: number): number {
   return Math.round(value * 100) / 100
 }
 
+/**
+ * Menambahkan filter owner ke query. ownerID kosong berarti super_admin
+ * (tanpa filter / melihat semua data).
+ */
+export function scopeOwner(conditions: string[], args: unknown[], ownerID: string, column = 'owner_id'): void {
+  if (!ownerID) return
+  args.push(ownerID)
+  conditions.push(`${column} = $${args.length}`)
+}
+
 export function addDays(value: Date, days: number): Date {
   const copy = new Date(value)
   copy.setDate(copy.getDate() + days)
@@ -55,8 +65,14 @@ export function isoDate(value: Date): string {
   return value.toISOString().slice(0, 10)
 }
 
-export async function nextNumber(table: string, column: string, prefix: string): Promise<string> {
+export async function nextNumber(table: string, column: string, prefix: string, ownerID = ''): Promise<string> {
   const { scalar } = await import('./db')
-  const count = Number((await scalar<number>(`SELECT count(*) FROM ${table} WHERE ${column} LIKE $1`, [`${prefix}%`])) ?? 0)
+  const args: unknown[] = [`${prefix}%`]
+  let sql = `SELECT count(*) FROM ${table} WHERE ${column} LIKE $1`
+  if (ownerID) {
+    sql += ` AND owner_id = $2`
+    args.push(ownerID)
+  }
+  const count = Number((await scalar<number>(sql, args)) ?? 0)
   return `${prefix}${String(count + 1).padStart(4, '0')}`
 }

@@ -40,6 +40,7 @@ export async function GET(request: NextRequest, { params }: { params: { job: str
           `${contract.nomor_kontrak} akan berakhir ${String(contract.tanggal_selesai).slice(0, 10)}`,
           'contract_ending',
           { id: contract.id },
+          String(contract.owner_id ?? ''),
         )
       }
       return NextResponse.json({

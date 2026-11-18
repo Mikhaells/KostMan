@@ -29,8 +29,7 @@ function validateProperty(input: any): void {
 }
 
 export async function listProperties(
-  userID: string,
-  role: string,
+  ownerID: string,
   q: Pagination,
   search: string,
   status: string,
@@ -38,8 +37,8 @@ export async function listProperties(
   const conditions: string[] = ['p.deleted_at IS NULL']
   const args: unknown[] = []
 
-  if (role === 'owner') {
-    args.push(userID)
+  if (ownerID) {
+    args.push(ownerID)
     conditions.push(`p.owner_id = $${args.length}`)
   }
   if (search) {
@@ -60,16 +59,16 @@ export async function listProperties(
   return { items, total }
 }
 
-export async function getProperty(id: string, userID: string, role: string): Promise<any> {
-  const row = await queryOne(
-    `SELECT p.*, (SELECT count(*) FROM rooms r WHERE r.properti_id = p.id) AS jumlah_kamar
-     FROM properties p WHERE p.id=$1 AND p.deleted_at IS NULL`,
-    [id],
-  )
-  if (!row) throw notFound('Properti tidak ditemukan')
-  if (role === 'owner' && String(row.owner_id) !== String(userID)) {
-    throw forbidden('Properti bukan milik Anda')
+export async function getProperty(id: string, ownerID: string): Promise<any> {
+  const args: unknown[] = [id]
+  let sql = `SELECT p.*, (SELECT count(*) FROM rooms r WHERE r.properti_id = p.id) AS jumlah_kamar
+     FROM properties p WHERE p.id=$1 AND p.deleted_at IS NULL`
+  if (ownerID) {
+    sql += ` AND p.owner_id=$2`
+    args.push(ownerID)
   }
+  const row = await queryOne(sql, args)
+  if (!row) throw notFound('Properti tidak ditemukan')
   return row
 }
 
@@ -102,8 +101,8 @@ export async function createProperty(ownerID: string, input: any): Promise<any> 
   }
 }
 
-export async function updateProperty(id: string, userID: string, role: string, input: any): Promise<any> {
-  await getProperty(id, userID, role)
+export async function updateProperty(id: string, ownerID: string, input: any): Promise<any> {
+  await getProperty(id, ownerID)
   validateProperty(input)
   const status = statusOrDefault(input?.status, allowedPropertyStatuses, 'aktif')
   try {
@@ -132,7 +131,8 @@ export async function updateProperty(id: string, userID: string, role: string, i
   }
 }
 
-export async function deleteProperty(id: string): Promise<void> {
+export async function deleteProperty(id: string, ownerID: string): Promise<void> {
+  await getProperty(id, ownerID)
   const active = Number(
     (await scalar<number>(
       `SELECT count(*) FROM contracts c JOIN rooms r ON r.id = c.kamar_id
@@ -141,21 +141,36 @@ export async function deleteProperty(id: string): Promise<void> {
     )) ?? 0,
   )
   if (active > 0) throw conflict('Properti masih memiliki kamar dengan kontrak aktif')
-  const affected = await exec(`UPDATE properties SET deleted_at = now() WHERE id=$1 AND deleted_at IS NULL`, [id])
+  const args: unknown[] = [id]
+  let sql = `UPDATE properties SET deleted_at = now() WHERE id=$1 AND deleted_at IS NULL`
+  if (ownerID) {
+    sql += ` AND owner_id=$2`
+    args.push(ownerID)
+  }
+  const affected = await exec(sql, args)
   if (!affected) throw notFound('Properti tidak ditemukan')
 }
 
-export async function restoreProperty(id: string): Promise<any> {
-  const row = await queryOne(`UPDATE properties SET deleted_at = NULL WHERE id=$1 RETURNING *`, [id])
+export async function restoreProperty(id: string, ownerID: string): Promise<any> {
+  const args: unknown[] = [id]
+  let sql = `UPDATE properties SET deleted_at = NULL WHERE id=$1`
+  if (ownerID) {
+    sql += ` AND owner_id=$2`
+    args.push(ownerID)
+  }
+  const row = await queryOne(`${sql} RETURNING *`, args)
   if (!row) throw notFound('Properti tidak ditemukan')
   return row
 }
 
-export async function listDeletedProperties(q: Pagination): Promise<Paginated<any>> {
-  const total = Number((await scalar<number>(`SELECT count(*) FROM properties WHERE deleted_at IS NOT NULL`)) ?? 0)
+export async function listDeletedProperties(q: Pagination, ownerID: string): Promise<Paginated<any>> {
+  const args: unknown[] = []
+  const scope = ownerID ? ` AND owner_id=$1` : ''
+  if (ownerID) args.push(ownerID)
+  const total = Number((await scalar<number>(`SELECT count(*) FROM properties WHERE deleted_at IS NOT NULL${scope}`, args)) ?? 0)
   const items = await query(
-    `SELECT * FROM properties WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT $1 OFFSET $2`,
-    [q.limit, q.offset],
+    `SELECT * FROM properties WHERE deleted_at IS NOT NULL${scope} ORDER BY deleted_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`,
+    [...args, q.limit, q.offset],
   )
   return { items, total }
 }

@@ -84,7 +84,7 @@ export default function TicketsPage() {
                     <tr key={ticket.id}>
                       <Td className="font-semibold text-slate-800">{ticket.nomor_tiket}</Td>
                       <Td><p className="max-w-[220px] truncate font-medium">{ticket.judul}</p><p className="text-xs text-slate-400">{ticket.deskripsi}</p></Td>
-                      <Td><p>{ticket.nama_penyewa ?? 'â€”'}</p><p className="text-xs text-slate-400">{ticket.nama_properti ?? ''}</p></Td>
+                      <Td><p>{ticket.nama_penyewa ?? '—'}</p><p className="text-xs text-slate-400">{ticket.nama_properti ?? ''}</p></Td>
                       <Td className="capitalize">{ticket.kategori}</Td>
                       <Td><StatusBadge status={ticket.prioritas} /></Td>
                       <Td><StatusBadge status={ticket.status} /></Td>
@@ -104,7 +104,7 @@ export default function TicketsPage() {
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         title={selected?.judul ?? 'Detail Tiket'}
-        subtitle={selected ? `${selected.nomor_tiket} Â· ${selected.nama_penyewa ?? ''}` : undefined}
+        subtitle={selected ? `${selected.nomor_tiket} · ${selected.nama_penyewa ?? ''}` : undefined}
         size="lg"
         footer={<><Button variant="outline" onClick={() => setDetailOpen(false)}>Batal</Button><Button loading={update.isPending} onClick={() => update.mutate()}>Simpan Perubahan</Button></>}
       >
@@ -130,7 +130,7 @@ export default function TicketsPage() {
                 </Select>
               </Field>
               <Field label="Ditugaskan kepada"><input className="input-base" value={form.assigned_to} onChange={(event) => setForm((prev) => ({ ...prev, assigned_to: event.target.value }))} placeholder="Nama teknisi / ID pengguna" /></Field>
-              <div className="sm:col-span-2"><Field label="Resolusi"><Textarea value={form.resolusi} onChange={(event) => setForm((prev) => ({ ...prev, resolusi: event.target.value }))} placeholder="Jelaskan tindakan yang dilakukanâ€¦" /></Field></div>
+              <div className="sm:col-span-2"><Field label="Resolusi"><Textarea value={form.resolusi} onChange={(event) => setForm((prev) => ({ ...prev, resolusi: event.target.value }))} placeholder="Jelaskan tindakan yang dilakukan…" /></Field></div>
             </div>
           </div>
         )}

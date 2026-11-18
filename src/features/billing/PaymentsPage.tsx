@@ -77,7 +77,7 @@ export default function PaymentsPage() {
         <div className="flex flex-wrap gap-3">
           <div className="relative min-w-[200px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Filter ID tagihanâ€¦" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { setKeyword(search); setPage(1) } }} />
+            <Input className="pl-9" placeholder="Filter ID tagihan…" value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { setKeyword(search); setPage(1) } }} />
           </div>
           <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="w-full sm:w-44">
             <option value="">Semua status</option><option value="pending">Pending</option>
@@ -98,8 +98,8 @@ export default function PaymentsPage() {
                 <tbody>
                   {list.data!.items.map((payment) => (
                     <tr key={payment.id}>
-                      <Td className="font-semibold text-slate-800">{payment.nomor_invoice ?? 'â€”'}</Td>
-                      <Td>{payment.nama_penyewa ?? 'â€”'}</Td>
+                      <Td className="font-semibold text-slate-800">{payment.nomor_invoice ?? '—'}</Td>
+                      <Td>{payment.nama_penyewa ?? '—'}</Td>
                       <Td className="font-semibold">{rupiah(payment.jumlah)}</Td>
                       <Td className="capitalize">{payment.metode.replace('_', ' ')}</Td>
                       <Td className="whitespace-nowrap text-xs">{formatDateTime(payment.tanggal_bayar)}</Td>
@@ -140,9 +140,9 @@ export default function PaymentsPage() {
               const invoice = invoices.data?.items.find((item) => item.id === event.target.value)
               setCashForm((prev) => ({ ...prev, tagihan_id: event.target.value, jumlah: invoice ? String(invoice.total) : prev.jumlah }))
             }}>
-              <option value="">Pilih tagihanâ€¦</option>
+              <option value="">Pilih tagihan…</option>
               {(invoices.data?.items ?? []).filter((invoice) => invoice.status !== 'batal').map((invoice) => (
-                <option key={invoice.id} value={invoice.id}>{invoice.nomor_invoice} Â· {invoice.nama_penyewa ?? ''} Â· {rupiah(invoice.total)}</option>
+                <option key={invoice.id} value={invoice.id}>{invoice.nomor_invoice} · {invoice.nama_penyewa ?? ''} · {rupiah(invoice.total)}</option>
               ))}
             </Select>
           </Field>

@@ -102,7 +102,7 @@ export default function TenantsPage() {
         <form className="flex flex-wrap gap-3" onSubmit={(event) => { event.preventDefault(); setKeyword(search); setPage(1) }}>
           <div className="relative min-w-[220px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Cari nama, email, atau NIKâ€¦" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <Input className="pl-9" placeholder="Cari nama, email, atau NIK…" value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
           <Select value={status} onChange={(event) => { setStatusFilter(event.target.value); setPage(1) }} className="w-full sm:w-40">
             <option value="">Semua status</option><option value="aktif">Aktif</option><option value="nonaktif">Nonaktif</option>
@@ -131,7 +131,7 @@ export default function TenantsPage() {
                         </div>
                       </Td>
                       <Td><p>{tenant.no_hp}</p><p className="text-xs text-slate-400">{tenant.email}</p></Td>
-                      <Td>{tenant.pekerjaan ?? 'â€”'}</Td>
+                      <Td>{tenant.pekerjaan ?? '—'}</Td>
                       <Td>{tenant.user_id ? <Badge tone="green">Terhubung</Badge> : <Badge tone="slate">Belum ada</Badge>}</Td>
                       <Td>
                         <Select
@@ -171,7 +171,7 @@ export default function TenantsPage() {
           <Field label="Nama lengkap" required><Input value={form.nama_lengkap} onChange={(event) => set('nama_lengkap', event.target.value)} /></Field>
           <Field label="NIK" required><Input value={form.nik} onChange={(event) => set('nik', event.target.value)} placeholder="16 digit" /></Field>
           <Field label="Email" required><Input type="email" value={form.email} onChange={(event) => set('email', event.target.value)} /></Field>
-          <Field label="No. HP" required><Input value={form.no_hp} onChange={(event) => set('no_hp', event.target.value)} placeholder="0812â€¦" /></Field>
+          <Field label="No. HP" required><Input value={form.no_hp} onChange={(event) => set('no_hp', event.target.value)} placeholder="0812…" /></Field>
           <Field label="Pekerjaan"><Input value={form.pekerjaan} onChange={(event) => set('pekerjaan', event.target.value)} /></Field>
           <Field label="Alamat asal"><Input value={form.alamat_asal} onChange={(event) => set('alamat_asal', event.target.value)} /></Field>
           <Field label="Kontak darurat (nama)" required><Input value={form.kontak_darurat_nama} onChange={(event) => set('kontak_darurat_nama', event.target.value)} /></Field>
@@ -199,7 +199,7 @@ export default function TenantsPage() {
         </div>
       </Modal>
 
-      <Modal open={Boolean(historyTenant)} onClose={() => setHistoryTenant(null)} title={`Riwayat Kontrak Â· ${historyTenant?.nama_lengkap ?? ''}`} size="lg">
+      <Modal open={Boolean(historyTenant)} onClose={() => setHistoryTenant(null)} title={`Riwayat Kontrak · ${historyTenant?.nama_lengkap ?? ''}`} size="lg">
         {history.isLoading ? <Loading /> : history.isError ? <ErrorState message={errorMessage(history.error)} /> : (
           (history.data ?? []).length === 0 ? <EmptyState title="Belum ada riwayat kontrak" /> : (
             <Table>
@@ -208,8 +208,8 @@ export default function TenantsPage() {
                 {(history.data ?? []).map((contract) => (
                   <tr key={contract.id}>
                     <Td className="font-semibold">{contract.nomor_kontrak}</Td>
-                    <Td>{contract.nomor_kamar ?? 'â€”'}</Td>
-                    <Td>{formatDate(contract.tanggal_mulai)} â€“ {formatDate(contract.tanggal_selesai)}</Td>
+                    <Td>{contract.nomor_kamar ?? '—'}</Td>
+                    <Td>{formatDate(contract.tanggal_mulai)} – {formatDate(contract.tanggal_selesai)}</Td>
                     <Td>{rupiah(contract.harga_sewa)}</Td>
                     <Td><StatusBadge status={contract.status} /></Td>
                   </tr>

@@ -5,6 +5,7 @@ export interface User {
   nama: string
   email: string
   role: Role
+  owner_id?: string | null
   no_hp?: string | null
   status: string
   created_at: string

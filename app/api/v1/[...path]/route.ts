@@ -45,6 +45,12 @@ const p = (ctx: Ctx, index = 0) => ctx.params[index] ?? ''
 const query = (ctx: Ctx, key: string) => ctx.url.searchParams.get(key) ?? ''
 const v = (value: unknown) => String(value ?? '')
 
+/** Filter owner untuk query. Super_admin melihat semua data (string kosong). */
+const ownerScope = (ctx: Ctx) =>
+  ctx.principal.role === 'super_admin' ? '' : ctx.principal.owner_id || ctx.principal.uid
+/** ID owner untuk pembuatan data — tidak pernah kosong. */
+const ownerWrite = (ctx: Ctx) => ctx.principal.owner_id || ctx.principal.uid
+
 // ---------------------------------------------------------------- auth (public)
 route('POST', '/auth/register', 'public', async ({ data }) => created(await auth.register(data)))
 route('POST', '/auth/login', 'public', async ({ data }) => ok(await auth.login(data)))
@@ -104,27 +110,37 @@ route('GET', '/tenants/me', 'auth', async (ctx) => ok(await tenants.getTenantByU
 
 // ------------------------------------------------------------------- invoices
 route('GET', '/invoices', 'auth', async (ctx) => {
-  const result = await billing.listInvoices(await ownTenantId(ctx), query(ctx, 'properti_id'), query(ctx, 'status'), ctx.q)
+  const result = await billing.listInvoices(
+    await ownTenantId(ctx), query(ctx, 'properti_id'), query(ctx, 'status'), ctx.q, ownerScope(ctx),
+  )
   return list(result.items, meta(ctx.q, result.total))
 })
-route('GET', '/invoices/:id/pdf', 'ops', async (ctx) => binary(await billing.invoicePdf(p(ctx))))
-route('POST', '/invoices/generate', 'ops', async () => ok({ dibuat: await billing.generateMonthlyInvoices() }))
-route('POST', '/invoices', 'ops', async ({ data }) => created(await billing.createInvoice(data)))
-route('PUT', '/invoices/:id', 'ops', async (ctx) => ok(await billing.updateInvoice(p(ctx), ctx.data)))
+route('GET', '/invoices/:id/pdf', 'ops', async (ctx) => binary(await billing.invoicePdf(p(ctx), ownerScope(ctx))))
+route('POST', '/invoices/generate', 'ops', async (ctx) =>
+  ok({ dibuat: await billing.generateMonthlyInvoices(ownerScope(ctx)) }),
+)
+route('POST', '/invoices', 'ops', async (ctx) => created(await billing.createInvoice(ctx.data, ownerWrite(ctx))))
+route('PUT', '/invoices/:id', 'ops', async (ctx) =>
+  ok(await billing.updateInvoice(p(ctx), ctx.data, ownerScope(ctx))),
+)
 route('POST', '/invoices/:id/void', 'ops', async (ctx) => {
-  await billing.voidInvoice(p(ctx))
+  await billing.voidInvoice(p(ctx), ownerScope(ctx))
   return ok({ message: 'Tagihan dibatalkan' })
 })
 route('GET', '/invoices/:id', 'auth', async (ctx) => {
-  const invoice = await billing.getInvoice(p(ctx))
+  const invoice = await billing.getInvoice(p(ctx), ownerScope(ctx))
   await assertTenantOwner(ctx, invoice.penyewa_id)
   return ok(invoice)
 })
 route('POST', '/invoices/:id/payments', 'auth', async (ctx) =>
-  created(await payments.createPayment(ctx.principal.uid, ctx.principal.role, { ...ctx.data, tagihan_id: p(ctx) }, false)),
+  created(await payments.createPayment(
+    ctx.principal.uid, ctx.principal.role, { ...ctx.data, tagihan_id: p(ctx) }, false, ownerWrite(ctx),
+  )),
 )
 route('POST', '/invoices/:id/payments/cash', 'ops', async (ctx) =>
-  created(await payments.createPayment(ctx.principal.uid, ctx.principal.role, { ...ctx.data, tagihan_id: p(ctx) }, true)),
+  created(await payments.createPayment(
+    ctx.principal.uid, ctx.principal.role, { ...ctx.data, tagihan_id: p(ctx) }, true, ownerWrite(ctx),
+  )),
 )
 
 // ------------------------------------------------------------------ contracts
@@ -135,37 +151,40 @@ route('GET', '/contracts', 'auth', async (ctx) => {
     query(ctx, 'properti_id'),
     query(ctx, 'status'),
     ctx.q,
+    ownerScope(ctx),
   )
   return list(result.items, meta(ctx.q, result.total))
 })
-route('POST', '/contracts', 'ops', async (ctx) => created(await contracts.createContract(ctx.principal.uid, ctx.data)))
+route('POST', '/contracts', 'ops', async (ctx) =>
+  created(await contracts.createContract(ctx.principal.uid, ctx.data, ownerWrite(ctx))),
+)
 route('POST', '/contracts/:id/renew', 'ops', async (ctx) =>
-  ok(await contracts.renewContract(p(ctx), v(ctx.data?.tanggal_selesai), ctx.principal.uid)),
+  ok(await contracts.renewContract(p(ctx), v(ctx.data?.tanggal_selesai), ctx.principal.uid, ownerScope(ctx))),
 )
 route('POST', '/contracts/:id/terminate', 'ops', async (ctx) =>
-  ok(await contracts.terminateContract(p(ctx), v(ctx.data?.status), v(ctx.data?.catatan))),
+  ok(await contracts.terminateContract(p(ctx), v(ctx.data?.status), v(ctx.data?.catatan), ownerScope(ctx))),
 )
-route('GET', '/contracts/:id/pdf', 'ops', async (ctx) => binary(await contracts.contractPdf(p(ctx))))
+route('GET', '/contracts/:id/pdf', 'ops', async (ctx) => binary(await contracts.contractPdf(p(ctx), ownerScope(ctx))))
 route('GET', '/contracts/:id', 'auth', async (ctx) => {
-  const contract = await contracts.getContract(p(ctx))
+  const contract = await contracts.getContract(p(ctx), ownerScope(ctx))
   await assertTenantOwner(ctx, contract.penyewa_id)
   return ok(contract)
 })
 
 // ------------------------------------------------------------------- payments
 route('GET', '/payments', 'ops', async (ctx) => {
-  const result = await payments.listPayments(query(ctx, 'tagihan_id'), query(ctx, 'status'), ctx.q)
+  const result = await payments.listPayments(query(ctx, 'tagihan_id'), query(ctx, 'status'), ctx.q, ownerScope(ctx))
   return list(result.items, meta(ctx.q, result.total))
 })
 route('POST', '/payments/:id/verify', 'ops', async (ctx) =>
-  ok(await payments.verifyPayment(p(ctx), ctx.principal.uid)),
+  ok(await payments.verifyPayment(p(ctx), ctx.principal.uid, ownerScope(ctx))),
 )
 route('POST', '/payments/:id/reject', 'ops', async (ctx) =>
-  ok(await payments.rejectPayment(p(ctx), ctx.principal.uid, v(ctx.data?.catatan))),
+  ok(await payments.rejectPayment(p(ctx), ctx.principal.uid, v(ctx.data?.catatan), ownerScope(ctx))),
 )
 
 // -------------------------------------------------------------------- tickets
-route('GET', '/tickets/stats', 'ops', async () => ok(await tickets.ticketStats()))
+route('GET', '/tickets/stats', 'ops', async (ctx) => ok(await tickets.ticketStats(ownerScope(ctx))))
 route('GET', '/tickets', 'auth', async (ctx) => {
   const result = await tickets.listTickets(
     ctx.principal.uid,
@@ -174,13 +193,16 @@ route('GET', '/tickets', 'auth', async (ctx) => {
     query(ctx, 'kategori'),
     query(ctx, 'prioritas'),
     ctx.q,
+    ownerScope(ctx),
   )
   return list(result.items, meta(ctx.q, result.total))
 })
-route('POST', '/tickets', 'auth', async (ctx) => created(await tickets.createTicket(ctx.principal.uid, ctx.data)))
-route('PATCH', '/tickets/:id', 'ops', async (ctx) => ok(await tickets.updateTicket(p(ctx), ctx.data)))
+route('POST', '/tickets', 'auth', async (ctx) =>
+  created(await tickets.createTicket(ctx.principal.uid, ctx.data, ownerWrite(ctx))),
+)
+route('PATCH', '/tickets/:id', 'ops', async (ctx) => ok(await tickets.updateTicket(p(ctx), ctx.data, ownerScope(ctx))))
 route('GET', '/tickets/:id', 'auth', async (ctx) => {
-  const ticket = await tickets.getTicket(p(ctx))
+  const ticket = await tickets.getTicket(p(ctx), ownerScope(ctx))
   if (ctx.principal.role === 'tenant') {
     const own = await ownTenantId(ctx)
     if (!own || own !== ticket.penyewa_id) throw forbidden('Tiket bukan milik Anda')
@@ -190,99 +212,104 @@ route('GET', '/tickets/:id', 'auth', async (ctx) => {
 
 // ---------------------------------------------------------------------- rooms
 route('GET', '/rooms', 'ops', async (ctx) => {
-  const result = await rooms.listRooms(query(ctx, 'properti_id'), query(ctx, 'status'), ctx.q)
+  const result = await rooms.listRooms(query(ctx, 'properti_id'), query(ctx, 'status'), ctx.q, ownerScope(ctx))
   return list(result.items, meta(ctx.q, result.total))
 })
-route('GET', '/rooms/:id', 'ops', async (ctx) => ok(await rooms.getRoom(p(ctx))))
-route('PUT', '/rooms/:id', 'ops', async (ctx) => ok(await rooms.updateRoom(p(ctx), ctx.data)))
-route('PATCH', '/rooms/:id/status', 'ops', async (ctx) => ok(await rooms.setRoomStatus(p(ctx), v(ctx.data?.status))))
+route('GET', '/rooms/:id', 'ops', async (ctx) => ok(await rooms.getRoom(p(ctx), ownerScope(ctx))))
+route('PUT', '/rooms/:id', 'ops', async (ctx) => ok(await rooms.updateRoom(p(ctx), ctx.data, ownerScope(ctx))))
+route('PATCH', '/rooms/:id/status', 'ops', async (ctx) =>
+  ok(await rooms.setRoomStatus(p(ctx), v(ctx.data?.status), ownerScope(ctx))),
+)
 route('DELETE', '/rooms/:id', 'ops', async (ctx) => {
-  await rooms.deleteRoom(p(ctx))
+  await rooms.deleteRoom(p(ctx), ownerScope(ctx))
   return noContent()
 })
 route('GET', '/properties/:id/rooms', 'ops', async (ctx) => {
-  const result = await rooms.listRooms(p(ctx), query(ctx, 'status'), ctx.q)
+  const result = await rooms.listRooms(p(ctx), query(ctx, 'status'), ctx.q, ownerScope(ctx))
   return list(result.items, meta(ctx.q, result.total))
 })
-route('POST', '/properties/:id/rooms', 'ops', async (ctx) => created(await rooms.createRoom(p(ctx), ctx.data)))
+route('POST', '/properties/:id/rooms', 'ops', async (ctx) =>
+  created(await rooms.createRoom(p(ctx), ctx.data, ownerWrite(ctx))),
+)
 
 // -------------------------------------------------------------------- tenants
 route('GET', '/tenants', 'ops', async (ctx) => {
-  const result = await tenants.listTenants(ctx.q, query(ctx, 'search'), query(ctx, 'status'))
+  const result = await tenants.listTenants(ctx.q, query(ctx, 'search'), query(ctx, 'status'), ownerScope(ctx))
   return list(result.items, meta(ctx.q, result.total))
 })
-route('POST', '/tenants', 'ops', async ({ data }) => created(await tenants.createTenant(data)))
-route('GET', '/tenants/:id/history', 'ops', async (ctx) => ok(await tenants.tenantHistory(p(ctx))))
+route('POST', '/tenants', 'ops', async (ctx) => created(await tenants.createTenant(ctx.data, ownerWrite(ctx))))
+route('GET', '/tenants/:id/history', 'ops', async (ctx) => ok(await tenants.tenantHistory(p(ctx), ownerScope(ctx))))
 route('POST', '/tenants/:id/portal-user', 'ops', async (ctx) =>
-  ok({ user_id: await tenants.ensurePortalUser(p(ctx), v(ctx.data?.password)), message: 'Akun portal penyewa siap digunakan' }),
+  ok({
+    user_id: await tenants.ensurePortalUser(p(ctx), v(ctx.data?.password), ownerScope(ctx)),
+    message: 'Akun portal penyewa siap digunakan',
+  }),
 )
-route('GET', '/tenants/:id', 'ops', async (ctx) => ok(await tenants.getTenant(p(ctx))))
-route('PUT', '/tenants/:id', 'ops', async (ctx) => ok(await tenants.updateTenant(p(ctx), ctx.data)))
+route('GET', '/tenants/:id', 'ops', async (ctx) => ok(await tenants.getTenant(p(ctx), ownerScope(ctx))))
+route('PUT', '/tenants/:id', 'ops', async (ctx) => ok(await tenants.updateTenant(p(ctx), ctx.data, ownerScope(ctx))))
 route('PATCH', '/tenants/:id/status', 'ops', async (ctx) =>
-  ok(await tenants.setTenantStatus(p(ctx), v(ctx.data?.status))),
+  ok(await tenants.setTenantStatus(p(ctx), v(ctx.data?.status), ownerScope(ctx))),
 )
 
 // ------------------------------------------------------------------ properties
-route('GET', '/properties', 'owner', async (ctx) => {
-  const result = await properties.listProperties(
-    ctx.principal.uid,
-    ctx.principal.role,
-    ctx.q,
-    query(ctx, 'search'),
-    query(ctx, 'status'),
-  )
+route('GET', '/properties', 'ops', async (ctx) => {
+  const result = await properties.listProperties(ownerScope(ctx), ctx.q, query(ctx, 'search'), query(ctx, 'status'))
   return list(result.items, meta(ctx.q, result.total))
 })
 route('GET', '/properties/deleted', 'owner', async (ctx) => {
-  const result = await properties.listDeletedProperties(ctx.q)
+  const result = await properties.listDeletedProperties(ctx.q, ownerScope(ctx))
   return list(result.items, meta(ctx.q, result.total))
 })
-route('POST', '/properties', 'owner', async (ctx) => created(await properties.createProperty(ctx.principal.uid, ctx.data)))
-route('GET', '/properties/:id', 'owner', async (ctx) =>
-  ok(await properties.getProperty(p(ctx), ctx.principal.uid, ctx.principal.role)),
-)
+route('POST', '/properties', 'owner', async (ctx) => created(await properties.createProperty(ownerWrite(ctx), ctx.data)))
+route('GET', '/properties/:id', 'ops', async (ctx) => ok(await properties.getProperty(p(ctx), ownerScope(ctx))))
 route('PUT', '/properties/:id', 'owner', async (ctx) =>
-  ok(await properties.updateProperty(p(ctx), ctx.principal.uid, ctx.principal.role, ctx.data)),
+  ok(await properties.updateProperty(p(ctx), ownerScope(ctx), ctx.data)),
 )
 route('DELETE', '/properties/:id', 'owner', async (ctx) => {
-  await properties.deleteProperty(p(ctx))
+  await properties.deleteProperty(p(ctx), ownerScope(ctx))
   return noContent()
 })
-route('POST', '/properties/:id/restore', 'owner', async (ctx) => ok(await properties.restoreProperty(p(ctx))))
+route('POST', '/properties/:id/restore', 'owner', async (ctx) =>
+  ok(await properties.restoreProperty(p(ctx), ownerScope(ctx))),
+)
 
 // ----------------------------------------------------------------------- users
 route('GET', '/users', 'owner', async (ctx) => {
-  const result = await auth.listUsers(ctx.q, query(ctx, 'search'))
+  const result = await auth.listUsers(ctx.q, query(ctx, 'search'), ownerScope(ctx))
   return list(result.items, meta(ctx.q, result.total))
 })
-route('POST', '/users', 'owner', async ({ data }) => created(await auth.createUser(data)))
-route('PUT', '/users/:id', 'owner', async (ctx) => ok(await auth.updateUser(p(ctx), ctx.data)))
+route('POST', '/users', 'owner', async (ctx) => created(await auth.createUser(ctx.data, ownerWrite(ctx))))
+route('PUT', '/users/:id', 'owner', async (ctx) =>
+  ok(await auth.updateUser(p(ctx), ctx.data, ownerScope(ctx), ctx.principal.uid)),
+)
 route('DELETE', '/users/:id', 'owner', async (ctx) => {
-  await auth.deleteUser(p(ctx))
+  await auth.deleteUser(p(ctx), ownerScope(ctx), ctx.principal.uid)
   return noContent()
 })
 
 // -------------------------------------------------------------------- dashboard
-route('GET', '/dashboard', 'owner', async () => ok(await reports.dashboard()))
-route('GET', '/reports/:kind/export', 'owner', async (ctx) => {
+route('GET', '/dashboard', 'ops', async (ctx) => ok(await reports.dashboard(ownerScope(ctx))))
+route('GET', '/reports/:kind/export', 'ops', async (ctx) => {
   const format = query(ctx, 'format') === 'pdf' ? 'pdf' : 'xlsx'
-  const result = await reports.exportReport(p(ctx), dateFrom(ctx), dateTo(ctx), query(ctx, 'properti_id'), format)
+  const result = await reports.exportReport(
+    p(ctx), dateFrom(ctx), dateTo(ctx), query(ctx, 'properti_id'), format, ownerScope(ctx),
+  )
   return binary(result)
 })
-route('GET', '/reports/:kind', 'owner', async (ctx) =>
-  ok(await reports.reportData(p(ctx), dateFrom(ctx), dateTo(ctx), query(ctx, 'properti_id'))),
+route('GET', '/reports/:kind', 'ops', async (ctx) =>
+  ok(await reports.reportData(p(ctx), dateFrom(ctx), dateTo(ctx), query(ctx, 'properti_id'), ownerScope(ctx))),
 )
 
 // -------------------------------------------------------------------- settings
-route('GET', '/settings', 'owner', async (ctx) => ok(await settings.getSettings(ctx.principal.uid)))
-route('GET', '/settings/banks', 'owner', async (ctx) => ok(await settings.listBanks(ctx.principal.uid)))
-route('POST', '/settings/banks', 'owner', async (ctx) => created(await settings.createBank(ctx.principal.uid, ctx.data)))
+route('GET', '/settings', 'owner', async (ctx) => ok(await settings.getSettings(ownerWrite(ctx))))
+route('GET', '/settings/banks', 'owner', async (ctx) => ok(await settings.listBanks(ownerWrite(ctx))))
+route('POST', '/settings/banks', 'owner', async (ctx) => created(await settings.createBank(ownerWrite(ctx), ctx.data)))
 route('DELETE', '/settings/banks/:id', 'owner', async (ctx) => {
-  await settings.deleteBank(ctx.principal.uid, p(ctx))
+  await settings.deleteBank(ownerWrite(ctx), p(ctx))
   return noContent()
 })
 route('PUT', '/settings/:key', 'owner', async (ctx) => {
-  await settings.putSetting(ctx.principal.uid, p(ctx), ctx.data)
+  await settings.putSetting(ownerWrite(ctx), p(ctx), ctx.data)
   return ok({ message: 'Pengaturan disimpan' })
 })
 

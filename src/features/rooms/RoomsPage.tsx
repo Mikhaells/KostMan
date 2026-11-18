@@ -115,7 +115,7 @@ export default function RoomsPage() {
           </Select>
           <div className="relative min-w-[200px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Cari nomor kamarâ€¦" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <Input className="pl-9" placeholder="Cari nomor kamar…" value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
           <Button type="submit" variant="secondary">Cari</Button>
         </form>
@@ -140,8 +140,8 @@ export default function RoomsPage() {
                           <div><p className="font-semibold text-slate-800">Kamar {room.nomor}</p><p className="text-xs text-slate-400">Deposit {rupiah(room.deposit)}</p></div>
                         </div>
                       </Td>
-                      <Td className="max-w-[180px] truncate">{room.nama_properti ?? 'â€”'}</Td>
-                      <Td>{room.tipe}<p className="text-xs text-slate-400">{room.luas_m2 ? `${room.luas_m2} mÂ²` : '-'}</p></Td>
+                      <Td className="max-w-[180px] truncate">{room.nama_properti ?? '—'}</Td>
+                      <Td>{room.tipe}<p className="text-xs text-slate-400">{room.luas_m2 ? `${room.luas_m2} m²` : '-'}</p></Td>
                       <Td className="font-semibold">{rupiah(room.harga_bulanan)}<p className="text-xs font-normal text-slate-400">/ bulan</p></Td>
                       <Td>
                         <Select
@@ -180,14 +180,14 @@ export default function RoomsPage() {
           {!editing && (
             <Field label="Properti" required>
               <Select value={selectedProperty} onChange={(event) => setSelectedProperty(event.target.value)}>
-                <option value="">Pilih propertiâ€¦</option>
+                <option value="">Pilih properti…</option>
                 {(properties.data?.items ?? []).map((property) => <option key={property.id} value={property.id}>{property.nama}</option>)}
               </Select>
             </Field>
           )}
           <Field label="Nomor kamar" required><Input value={form.nomor} onChange={(event) => set('nomor', event.target.value)} placeholder="A01" /></Field>
           <Field label="Tipe kamar" required><Input value={form.tipe} onChange={(event) => set('tipe', event.target.value)} placeholder="Standar / VIP" /></Field>
-          <Field label="Luas (mÂ²)"><Input type="number" value={form.luas_m2} onChange={(event) => set('luas_m2', event.target.value)} /></Field>
+          <Field label="Luas (m²)"><Input type="number" value={form.luas_m2} onChange={(event) => set('luas_m2', event.target.value)} /></Field>
           <Field label="Harga bulanan" required><Input type="number" value={form.harga_bulanan} onChange={(event) => set('harga_bulanan', event.target.value)} /></Field>
           <Field label="Harga tahunan"><Input type="number" value={form.harga_tahunan} onChange={(event) => set('harga_tahunan', event.target.value)} /></Field>
           <Field label="Deposit"><Input type="number" value={form.deposit} onChange={(event) => set('deposit', event.target.value)} /></Field>

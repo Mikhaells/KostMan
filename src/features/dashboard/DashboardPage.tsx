@@ -20,7 +20,7 @@ export default function DashboardPage() {
     queryFn: () => apiList<Invoice>('/invoices', { limit: 5, sort: 'desc' }),
   })
 
-  if (query.isLoading) return <Loading label="Memuat ringkasan dashboardâ€¦" />
+  if (query.isLoading) return <Loading label="Memuat ringkasan dashboard…" />
   if (query.isError) return <ErrorState message={errorMessage(query.error)} onRetry={() => query.refetch()} />
 
   const data = query.data!
@@ -86,7 +86,7 @@ export default function DashboardPage() {
                 <div key={item.nama}>
                   <div className="mb-1 flex justify-between text-xs">
                     <span className="font-semibold text-slate-700">{item.nama}</span>
-                    <span className="text-slate-500">{item.terisi}/{item.total} Â· {item.persen}%</span>
+                    <span className="text-slate-500">{item.terisi}/{item.total} · {item.persen}%</span>
                   </div>
                   <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                     <div className="h-full rounded-full bg-brand-500" style={{ width: `${Math.min(item.persen, 100)}%` }} />
@@ -123,7 +123,7 @@ export default function DashboardPage() {
                 {recent.data!.items.map((invoice) => (
                   <tr key={invoice.id}>
                     <Td className="font-semibold text-slate-800">{invoice.nomor_invoice}</Td>
-                    <Td>{invoice.nama_penyewa ?? 'â€”'}</Td>
+                    <Td>{invoice.nama_penyewa ?? '—'}</Td>
                     <Td>{formatDate(invoice.tanggal_jatuh_tempo)}</Td>
                     <Td className="font-semibold">{rupiah(invoice.total)}</Td>
                     <Td><StatusBadge status={invoice.status} /></Td>

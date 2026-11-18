@@ -109,7 +109,7 @@ export default function InvoicesPage() {
         <form className="flex flex-wrap gap-3" onSubmit={(event) => { event.preventDefault(); setKeyword(search); setPage(1) }}>
           <div className="relative min-w-[220px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Cari nomor invoice atau penyewaâ€¦" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <Input className="pl-9" placeholder="Cari nomor invoice atau penyewa…" value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
           <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="w-full sm:w-44">
             <option value="">Semua status</option>
@@ -132,8 +132,8 @@ export default function InvoicesPage() {
                   {list.data!.items.map((invoice) => (
                     <tr key={invoice.id}>
                       <Td className="font-semibold text-slate-800">{invoice.nomor_invoice}</Td>
-                      <Td><p>{invoice.nama_penyewa ?? 'â€”'}</p><p className="text-xs text-slate-400">{invoice.nomor_kamar ?? ''}</p></Td>
-                      <Td className="whitespace-nowrap text-xs">{formatDate(invoice.periode_mulai)} â€“ {formatDate(invoice.periode_selesai)}</Td>
+                      <Td><p>{invoice.nama_penyewa ?? '—'}</p><p className="text-xs text-slate-400">{invoice.nomor_kamar ?? ''}</p></Td>
+                      <Td className="whitespace-nowrap text-xs">{formatDate(invoice.periode_mulai)} – {formatDate(invoice.periode_selesai)}</Td>
                       <Td className="whitespace-nowrap">{formatDate(invoice.tanggal_jatuh_tempo)}</Td>
                       <Td className="font-semibold">{rupiah(invoice.total)}</Td>
                       <Td><StatusBadge status={invoice.status} /></Td>
@@ -169,9 +169,9 @@ export default function InvoicesPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Kontrak" required>
             <Select value={form.kontrak_id} onChange={(event) => set('kontrak_id', event.target.value)} disabled={Boolean(editing)}>
-              <option value="">Pilih kontrakâ€¦</option>
+              <option value="">Pilih kontrak…</option>
               {(contracts.data?.items ?? []).map((contract) => (
-                <option key={contract.id} value={contract.id}>{contract.nomor_kontrak} Â· {contract.nama_penyewa ?? ''}</option>
+                <option key={contract.id} value={contract.id}>{contract.nomor_kontrak} · {contract.nama_penyewa ?? ''}</option>
               ))}
             </Select>
           </Field>
@@ -200,9 +200,9 @@ export default function InvoicesPage() {
         {detail && (
           <div className="space-y-4">
             <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
-              <div><p className="text-xs text-slate-500">Penyewa</p><p className="font-semibold text-slate-800">{detail.nama_penyewa ?? 'â€”'}</p></div>
+              <div><p className="text-xs text-slate-500">Penyewa</p><p className="font-semibold text-slate-800">{detail.nama_penyewa ?? '—'}</p></div>
               <div><p className="text-xs text-slate-500">Status</p><StatusBadge status={detail.status} /></div>
-              <div><p className="text-xs text-slate-500">Periode</p><p className="font-semibold text-slate-800">{formatDate(detail.periode_mulai)} â€“ {formatDate(detail.periode_selesai)}</p></div>
+              <div><p className="text-xs text-slate-500">Periode</p><p className="font-semibold text-slate-800">{formatDate(detail.periode_mulai)} – {formatDate(detail.periode_selesai)}</p></div>
               <div><p className="text-xs text-slate-500">Jatuh tempo</p><p className="font-semibold text-slate-800">{formatDate(detail.tanggal_jatuh_tempo)}</p></div>
             </div>
             <Table>
@@ -215,7 +215,7 @@ export default function InvoicesPage() {
                 <tr><Td className="font-bold">Total</Td><Td className="text-right font-bold text-brand-600">{rupiah(detail.total)}</Td></tr>
               </tbody>
             </Table>
-            {detail.tanggal_bayar && <Badge tone="green">Dibayar {formatDate(detail.tanggal_bayar)} Â· {detail.metode_bayar ?? '-'}</Badge>}
+            {detail.tanggal_bayar && <Badge tone="green">Dibayar {formatDate(detail.tanggal_bayar)} · {detail.metode_bayar ?? '-'}</Badge>}
           </div>
         )}
       </Modal>

@@ -111,7 +111,7 @@ export default function PropertiesPage() {
         <form className="flex flex-wrap gap-3" onSubmit={(event) => { event.preventDefault(); setKeyword(search); setPage(1) }}>
           <div className="relative min-w-[220px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Cari nama atau alamat propertiâ€¦" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <Input className="pl-9" placeholder="Cari nama atau alamat properti…" value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
           <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="w-full sm:w-44">
             <option value="">Semua status</option>

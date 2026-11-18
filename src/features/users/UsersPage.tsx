@@ -67,7 +67,7 @@ export default function UsersPage() {
         <form className="flex flex-wrap gap-3" onSubmit={(event) => { event.preventDefault(); setKeyword(search); setPage(1) }}>
           <div className="relative min-w-[220px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Cari nama atau emailâ€¦" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <Input className="pl-9" placeholder="Cari nama atau email…" value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
           <Button type="submit" variant="secondary">Cari</Button>
         </form>
@@ -91,7 +91,7 @@ export default function UsersPage() {
                         </div>
                       </Td>
                       <Td><Badge tone={user.role === 'owner' || user.role === 'super_admin' ? 'violet' : 'blue'}>{roleLabels[user.role] ?? user.role}</Badge></Td>
-                      <Td>{user.no_hp ?? 'â€”'}</Td>
+                      <Td>{user.no_hp ?? '—'}</Td>
                       <Td className="whitespace-nowrap text-xs">{formatDate(user.created_at)}</Td>
                       <Td><Badge tone={user.status === 'aktif' ? 'green' : 'slate'}>{user.status}</Badge></Td>
                       <Td>
@@ -123,7 +123,6 @@ export default function UsersPage() {
             <Field label="No. HP"><Input value={editForm.no_hp} onChange={(event) => setEditForm((prev) => ({ ...prev, no_hp: event.target.value }))} /></Field>
             <Field label="Role">
               <Select value={editForm.role} onChange={(event) => setEditForm((prev) => ({ ...prev, role: event.target.value }))}>
-                <option value="super_admin">Super Admin</option><option value="owner">Owner</option>
                 <option value="manager">Manager</option><option value="tenant">Penyewa</option>
               </Select>
             </Field>
@@ -141,7 +140,7 @@ export default function UsersPage() {
             <Field label="No. HP"><Input value={createForm.no_hp} onChange={(event) => setCreateForm((prev) => ({ ...prev, no_hp: event.target.value }))} /></Field>
             <Field label="Role">
               <Select value={createForm.role} onChange={(event) => setCreateForm((prev) => ({ ...prev, role: event.target.value }))}>
-                <option value="manager">Manager</option><option value="owner">Owner</option><option value="super_admin">Super Admin</option>
+                <option value="manager">Manager</option><option value="tenant">Penyewa</option>
               </Select>
             </Field>
           </div>

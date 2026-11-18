@@ -9,7 +9,7 @@ import {
   type Pagination,
 } from '@/lib/server/http'
 import { createNotification, mail, notifyAdmins } from '@/lib/server/notify'
-import { json, nextNumber, optional } from '@/lib/server/util'
+import { json, nextNumber, optional, scopeOwner } from '@/lib/server/util'
 
 const allowedCategories = new Set(['listrik', 'air', 'furniture', 'kebersihan', 'lainnya'])
 const allowedPriorities = new Set(['rendah', 'sedang', 'tinggi', 'urgent'])
@@ -19,7 +19,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-export async function createTicket(userID: string, input: any): Promise<any> {
+export async function createTicket(userID: string, input: any, ownerID: string): Promise<any> {
   const judulRaw = String(input?.judul ?? '')
   const deskripsiRaw = String(input?.deskripsi ?? '')
   const judul = optional(judulRaw)
@@ -36,13 +36,24 @@ export async function createTicket(userID: string, input: any): Promise<any> {
   const foto: unknown[] = Array.isArray(input?.foto) ? input.foto : []
   if (foto.length > 3) throw badRequest('Maksimal 3 foto tiket')
 
-  const tenant = await queryOne<{ id: string }>(`SELECT id FROM tenants WHERE user_id=$1`, [userID]).catch(() => null)
+  const tenantArgs: unknown[] = [userID]
+  let tenantSql = `SELECT id FROM tenants WHERE user_id=$1`
+  if (ownerID) {
+    tenantSql += ` AND owner_id=$2`
+    tenantArgs.push(ownerID)
+  }
+  const tenant = await queryOne<{ id: string }>(tenantSql, tenantArgs).catch(() => null)
   if (!tenant) throw forbidden('Hanya penyewa yang bisa mengajukan tiket')
 
+  const contractArgs: unknown[] = [tenant.id]
+  let contractSql = `SELECT r.id, r.properti_id FROM contracts c JOIN rooms r ON r.id=c.kamar_id
+     WHERE c.penyewa_id=$1 AND c.status='aktif'`
+  if (ownerID) {
+    contractSql += ` AND c.owner_id=$2`
+    contractArgs.push(ownerID)
+  }
   const contract = await queryOne<{ id: string; properti_id: string }>(
-    `SELECT r.id, r.properti_id FROM contracts c JOIN rooms r ON r.id=c.kamar_id
-     WHERE c.penyewa_id=$1 AND c.status='aktif' LIMIT 1`,
-    [tenant.id],
+    `${contractSql} LIMIT 1`, contractArgs,
   ).catch(() => null)
   if (!contract) throw conflict('Tidak ada kontrak aktif untuk mengajukan tiket')
 
@@ -50,7 +61,7 @@ export async function createTicket(userID: string, input: any): Promise<any> {
   const prefix = `TKT-${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}-`
   let number: string
   try {
-    number = await nextNumber('tickets', 'nomor_tiket', prefix)
+    number = await nextNumber('tickets', 'nomor_tiket', prefix, ownerID)
   } catch (error) {
     throw internal(errorMessage(error))
   }
@@ -58,9 +69,9 @@ export async function createTicket(userID: string, input: any): Promise<any> {
   let created: any
   try {
     created = await queryOne(
-      `INSERT INTO tickets (nomor_tiket, penyewa_id, kamar_id, properti_id, judul, deskripsi, kategori, prioritas, foto, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'open') RETURNING *`,
-      [number, tenant.id, contract.id, contract.properti_id, judul, deskripsi, kategori, prioritas, json(foto)],
+      `INSERT INTO tickets (owner_id, nomor_tiket, penyewa_id, kamar_id, properti_id, judul, deskripsi, kategori, prioritas, foto, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'open') RETURNING *`,
+      [ownerID || null, number, tenant.id, contract.id, contract.properti_id, judul, deskripsi, kategori, prioritas, json(foto)],
     )
   } catch (error) {
     throw internal(errorMessage(error))
@@ -70,12 +81,12 @@ export async function createTicket(userID: string, input: any): Promise<any> {
     await notifyAdmins(`Tiket baru ${created.nomor_tiket}`, judulRaw, 'ticket_created', {
       ticket_id: created.id,
       prioritas: created.prioritas,
-    })
+    }, ownerID)
   } catch {
     // notifikasi tidak menggagalkan pembuatan tiket
   }
 
-  return getTicket(created.id)
+  return getTicket(created.id, ownerID)
 }
 
 export async function listTickets(
@@ -85,9 +96,11 @@ export async function listTickets(
   category: string,
   priority: string,
   q: Pagination,
+  ownerID: string,
 ): Promise<Paginated<any>> {
   const conditions: string[] = ['1=1']
   const args: unknown[] = []
+  scopeOwner(conditions, args, ownerID, 't.owner_id')
   if (role === 'tenant') {
     args.push(userID)
     conditions.push('t.penyewa_id = (SELECT id FROM tenants WHERE user_id=$1)')
@@ -120,18 +133,21 @@ export async function listTickets(
   return { items, total }
 }
 
-export async function getTicket(id: string): Promise<any> {
-  const ticket = await queryOne(
-    `SELECT t.*, tn.nama_lengkap AS nama_penyewa, p.nama AS nama_properti
-     FROM tickets t JOIN tenants tn ON tn.id=t.penyewa_id JOIN properties p ON p.id=t.properti_id WHERE t.id=$1`,
-    [id],
-  ).catch(() => null)
+export async function getTicket(id: string, ownerID = ''): Promise<any> {
+  const args: unknown[] = [id]
+  let sql = `SELECT t.*, tn.nama_lengkap AS nama_penyewa, p.nama AS nama_properti
+     FROM tickets t JOIN tenants tn ON tn.id=t.penyewa_id JOIN properties p ON p.id=t.properti_id WHERE t.id=$1`
+  if (ownerID) {
+    sql += ` AND t.owner_id=$2`
+    args.push(ownerID)
+  }
+  const ticket = await queryOne(sql, args).catch(() => null)
   if (!ticket) throw notFound('Tiket tidak ditemukan')
   return ticket
 }
 
-export async function updateTicket(id: string, input: any): Promise<any> {
-  const t = await getTicket(id)
+export async function updateTicket(id: string, input: any, ownerID: string): Promise<any> {
+  const t = await getTicket(id, ownerID)
 
   const inStatus = String(input?.status ?? '')
   let status = String(t.status ?? '')
@@ -168,7 +184,7 @@ export async function updateTicket(id: string, input: any): Promise<any> {
     throw internal(errorMessage(error))
   }
 
-  const updated = await getTicket(id)
+  const updated = await getTicket(id, ownerID)
 
   const tenantUser = await queryOne<{ user_id: string | null }>(
     `SELECT coalesce(user_id::text,'') AS user_id FROM tenants WHERE id=$1`,
@@ -203,15 +219,23 @@ export async function updateTicket(id: string, input: any): Promise<any> {
   return updated
 }
 
-export async function ticketStats(): Promise<Record<string, number>> {
-  const rows = await query<{ status: string; count: number }>(`SELECT status, count(*) FROM tickets GROUP BY status`)
+export async function ticketStats(ownerID: string): Promise<Record<string, number>> {
+  const args: unknown[] = []
+  const scope = ownerID ? ` WHERE owner_id=$1` : ''
+  if (ownerID) args.push(ownerID)
+  const rows = await query<{ status: string; count: number }>(
+    `SELECT status, count(*) FROM tickets${scope} GROUP BY status`, args,
+  )
   const out: Record<string, number> = { open: 0, in_progress: 0, resolved: 0, closed: 0, urgent: 0 }
   for (const row of rows) {
     if (row?.status) out[row.status] = Number(row.count ?? 0)
   }
+  const urgentArgs = [...args]
+  const urgentScope = ownerID ? ` AND owner_id=$1` : ''
   const urgent = Number(
     (await scalar<number>(
-      `SELECT count(*) FROM tickets WHERE prioritas='urgent' AND status IN ('open','in_progress')`,
+      `SELECT count(*) FROM tickets WHERE prioritas='urgent' AND status IN ('open','in_progress')${urgentScope}`,
+      urgentArgs,
     )) ?? 0,
   )
   out.urgent = urgent

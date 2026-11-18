@@ -2,7 +2,7 @@ import { exec, query, queryOne, scalar } from '@/lib/server/db'
 import { badRequest, conflict, internal, isUniqueViolation, notFound, type Paginated, type Pagination } from '@/lib/server/http'
 import { mail, notifyTenantUser } from '@/lib/server/notify'
 import { invoicePdfBuffer } from '@/lib/server/pdf'
-import { json, nextNumber, optional, parseDate, statusOrDefault } from '@/lib/server/util'
+import { json, nextNumber, optional, parseDate, scopeOwner, statusOrDefault } from '@/lib/server/util'
 
 const INVOICE_SELECT = `SELECT i.*, t.nama_lengkap AS nama_penyewa, p.nama AS nama_properti, r.nomor AS nomor_kamar
   FROM invoices i JOIN tenants t ON t.id=i.penyewa_id JOIN properties p ON p.id=i.properti_id
@@ -36,9 +36,11 @@ export async function listInvoices(
   propertyID: string,
   status: string,
   q: Pagination,
+  ownerID: string,
 ): Promise<Paginated<any>> {
   const conditions: string[] = ['1=1']
   const args: unknown[] = []
+  scopeOwner(conditions, args, ownerID, 'i.owner_id')
   const add = (column: string, value: string) => {
     if (value) {
       args.push(value)
@@ -56,19 +58,31 @@ export async function listInvoices(
   return { items, total }
 }
 
-export async function getInvoice(id: string): Promise<any> {
-  const row = await queryOne(`${INVOICE_SELECT} WHERE i.id=$1`, [id])
+export async function getInvoice(id: string, ownerID = ''): Promise<any> {
+  const args: unknown[] = [id]
+  let sql = `${INVOICE_SELECT} WHERE i.id=$1`
+  if (ownerID) {
+    sql += ` AND i.owner_id=$2`
+    args.push(ownerID)
+  }
+  const row = await queryOne(sql, args)
   if (!row) throw notFound('Tagihan tidak ditemukan')
   return row
 }
 
-export async function createInvoice(input: any): Promise<any> {
+export async function createInvoice(input: any, ownerID: string): Promise<any> {
   const start = parseDate(String(input?.periode_mulai ?? ''))
   const end = parseDate(String(input?.periode_selesai ?? ''))
   const due = parseDate(String(input?.tanggal_jatuh_tempo ?? ''))
   if (end < start) throw badRequest('Periode selesai harus setelah periode mulai')
 
-  const contract = await queryOne(`SELECT * FROM contracts WHERE id=$1`, [input?.kontrak_id])
+  const contractArgs: unknown[] = [input?.kontrak_id]
+  let contractSql = `SELECT * FROM contracts WHERE id=$1`
+  if (ownerID) {
+    contractSql += ` AND owner_id=$2`
+    contractArgs.push(ownerID)
+  }
+  const contract = await queryOne(contractSql, contractArgs)
   if (!contract) throw badRequest('Kontrak tidak ditemukan')
   if (contract.status !== 'aktif') throw conflict('Tagihan hanya bisa dibuat untuk kontrak aktif')
 
@@ -76,20 +90,27 @@ export async function createInvoice(input: any): Promise<any> {
     ? Number(input.jumlah_pokok)
     : Number(contract.harga_sewa ?? 0)
 
-  const room = await queryOne<{ properti_id: string }>(`SELECT properti_id FROM rooms WHERE id=$1`, [contract.kamar_id])
+  const roomArgs: unknown[] = [contract.kamar_id]
+  let roomSql = `SELECT properti_id FROM rooms WHERE id=$1`
+  if (ownerID) {
+    roomSql += ` AND owner_id=$2`
+    roomArgs.push(ownerID)
+  }
+  const room = await queryOne<{ properti_id: string }>(roomSql, roomArgs)
   if (!room) throw internalError(new Error('Gagal mengambil properti kamar'))
 
   const status = statusOrDefault(String(input?.status ?? ''), ['draft', 'terkirim'], 'terkirim')
-  const number = await nextNumber('invoices', 'nomor_invoice', `INV-${start.slice(0, 7).replace('-', '')}-`)
+  const number = await nextNumber('invoices', 'nomor_invoice', `INV-${start.slice(0, 7).replace('-', '')}-`, ownerID)
   const total = calcTotal({ ...input, jumlah_pokok: jumlahPokok })
 
   let inv: any
   try {
     inv = await queryOne(
-      `INSERT INTO invoices (nomor_invoice, kontrak_id, penyewa_id, properti_id, periode_mulai, periode_selesai,
+      `INSERT INTO invoices (owner_id, nomor_invoice, kontrak_id, penyewa_id, properti_id, periode_mulai, periode_selesai,
         jumlah_pokok, item_tambahan, diskon, denda, total, tanggal_jatuh_tempo, status, catatan)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [
+        ownerID || contract.owner_id || null,
         number,
         contract.id,
         contract.penyewa_id,
@@ -136,10 +157,10 @@ export async function createInvoice(input: any): Promise<any> {
     }
   }
 
-  return getInvoice(inv.id)
+  return getInvoice(inv.id, ownerID)
 }
 
-export async function generateMonthlyInvoices(): Promise<number> {
+export async function generateMonthlyInvoices(ownerID = ''): Promise<number> {
   const now = new Date()
   const year = now.getFullYear()
   const month = now.getMonth()
@@ -147,16 +168,24 @@ export async function generateMonthlyInvoices(): Promise<number> {
   const end = `${year}-${pad(month + 1)}-${pad(new Date(year, month + 1, 0).getDate())}`
   const due = `${year}-${pad(month + 1)}-10`
 
-  const contracts = await query<{ id: string; penyewa_id: string; harga_sewa: number }>(
-    `SELECT id, penyewa_id, harga_sewa FROM contracts WHERE status='aktif'`,
-  )
+  const args: unknown[] = []
+  let sql = `SELECT id, penyewa_id, harga_sewa, owner_id FROM contracts WHERE status='aktif'`
+  if (ownerID) {
+    sql += ` AND owner_id=$1`
+    args.push(ownerID)
+  }
+  const contracts = await query<{ id: string; penyewa_id: string; harga_sewa: number; owner_id: string }>(sql, args)
 
   let created = 0
   for (const contract of contracts) {
-    const exists = Number((await scalar<number>(
-      `SELECT count(*) FROM invoices WHERE kontrak_id=$1 AND periode_mulai=$2`,
-      [contract.id, start],
-    )) ?? 0)
+    const invOwner = ownerID || String(contract.owner_id ?? '')
+    const existsArgs: unknown[] = [contract.id, start]
+    let existsSql = `SELECT count(*) FROM invoices WHERE kontrak_id=$1 AND periode_mulai=$2`
+    if (invOwner) {
+      existsSql += ` AND owner_id=$3`
+      existsArgs.push(invOwner)
+    }
+    const exists = Number((await scalar<number>(existsSql, existsArgs)) ?? 0)
     if (exists > 0) continue
 
     try {
@@ -167,7 +196,7 @@ export async function generateMonthlyInvoices(): Promise<number> {
         jumlah_pokok: Number(contract.harga_sewa ?? 0),
         tanggal_jatuh_tempo: due,
         status: 'terkirim',
-      })
+      }, invOwner)
       created++
     } catch {
       // Go juga mengabaikan galat Create per kontrak
@@ -176,8 +205,8 @@ export async function generateMonthlyInvoices(): Promise<number> {
   return created
 }
 
-export async function updateInvoice(id: string, input: any): Promise<any> {
-  const inv = await getInvoice(id)
+export async function updateInvoice(id: string, input: any, ownerID: string): Promise<any> {
+  const inv = await getInvoice(id, ownerID)
   if (inv.status === 'dibayar' || inv.status === 'batal') {
     throw conflict('Tagihan yang sudah dibayar/dibatalkan tidak bisa diubah')
   }
@@ -206,15 +235,21 @@ export async function updateInvoice(id: string, input: any): Promise<any> {
   } catch (error) {
     throw internalError(error)
   }
-  return getInvoice(id)
+  return getInvoice(id, ownerID)
 }
 
-export async function voidInvoice(id: string): Promise<void> {
-  const inv = await getInvoice(id)
+export async function voidInvoice(id: string, ownerID: string): Promise<void> {
+  const inv = await getInvoice(id, ownerID)
   if (inv.status === 'dibayar') {
     throw conflict('Tagihan yang sudah dibayar tidak bisa dihapus, gunakan void dengan pembatalan pembayaran')
   }
-  const affected = await exec(`UPDATE invoices SET status='batal' WHERE id=$1`, [id])
+  const args: unknown[] = [id]
+  let sql = `UPDATE invoices SET status='batal' WHERE id=$1`
+  if (ownerID) {
+    sql += ` AND owner_id=$2`
+    args.push(ownerID)
+  }
+  const affected = await exec(sql, args)
   if (affected === 0) throw notFound('Tagihan tidak ditemukan')
 }
 
@@ -304,8 +339,8 @@ export async function sendDueReminders(days: number): Promise<number> {
   return rows.length
 }
 
-export async function invoicePdf(id: string): Promise<{ bytes: Buffer; filename: string }> {
-  const inv = await getInvoice(id)
+export async function invoicePdf(id: string, ownerID: string): Promise<{ bytes: Buffer; filename: string }> {
+  const inv = await getInvoice(id, ownerID)
   const tenant = await queryOne(`SELECT * FROM tenants WHERE id=$1`, [inv.penyewa_id])
   if (!tenant) throw internal('Penyewa tidak ditemukan')
   const bytes = await invoicePdfBuffer(inv, tenant, String(inv.nama_properti ?? ''))

@@ -8,7 +8,7 @@ import {
   type Paginated,
   type Pagination,
 } from '@/lib/server/http'
-import { json, optional, statusOrDefault } from '@/lib/server/util'
+import { json, optional, scopeOwner, statusOrDefault } from '@/lib/server/util'
 
 const allowedRoomStatus = ['kosong', 'terisi', 'maintenance', 'reserved']
 
@@ -22,9 +22,15 @@ function validateRoom(input: any): void {
   if (foto.length > 10) throw badRequest('Maksimal 10 foto kamar')
 }
 
-export async function listRooms(propertyID: string, status: string, q: Pagination): Promise<Paginated<any>> {
+export async function listRooms(
+  propertyID: string,
+  status: string,
+  q: Pagination,
+  ownerID: string,
+): Promise<Paginated<any>> {
   const conditions: string[] = ['1=1']
   const args: unknown[] = []
+  scopeOwner(conditions, args, ownerID, 'r.owner_id')
 
   if (propertyID) {
     args.push(propertyID)
@@ -44,30 +50,38 @@ export async function listRooms(propertyID: string, status: string, q: Paginatio
   return { items, total }
 }
 
-export async function getRoom(id: string): Promise<any> {
-  const row = await queryOne(
-    `SELECT r.*, p.nama AS nama_properti FROM rooms r JOIN properties p ON p.id=r.properti_id WHERE r.id=$1`,
-    [id],
-  )
+export async function getRoom(id: string, ownerID: string): Promise<any> {
+  const args: unknown[] = [id]
+  let sql = `SELECT r.*, p.nama AS nama_properti FROM rooms r JOIN properties p ON p.id=r.properti_id WHERE r.id=$1`
+  if (ownerID) {
+    sql += ` AND r.owner_id=$2`
+    args.push(ownerID)
+  }
+  const row = await queryOne(sql, args)
   if (!row) throw notFound('Kamar tidak ditemukan')
   return row
 }
 
-export async function createRoom(propertyID: string, input: any): Promise<any> {
+export async function createRoom(propertyID: string, input: any, ownerID: string): Promise<any> {
   validateRoom(input)
   const status = statusOrDefault(input?.status, allowedRoomStatus, 'kosong')
 
-  const exists = Number(
-    (await scalar<number>(`SELECT count(*) FROM properties WHERE id=$1 AND deleted_at IS NULL`, [propertyID])) ?? 0,
-  )
+  const propArgs: unknown[] = [propertyID]
+  let propSql = `SELECT count(*) FROM properties WHERE id=$1 AND deleted_at IS NULL`
+  if (ownerID) {
+    propSql += ` AND owner_id=$2`
+    propArgs.push(ownerID)
+  }
+  const exists = Number((await scalar<number>(propSql, propArgs)) ?? 0)
   if (exists === 0) throw notFound('Properti tidak ditemukan')
 
   try {
     return await queryOne(
-      `INSERT INTO rooms (properti_id, nomor, tipe, luas_m2, harga_bulanan, harga_tahunan, deposit,
+      `INSERT INTO rooms (owner_id, properti_id, nomor, tipe, luas_m2, harga_bulanan, harga_tahunan, deposit,
         fasilitas, foto, status, keterangan)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
+        ownerID || null,
         propertyID,
         String(input.nomor).trim(),
         String(input.tipe).trim(),
@@ -86,8 +100,8 @@ export async function createRoom(propertyID: string, input: any): Promise<any> {
   }
 }
 
-export async function updateRoom(id: string, input: any): Promise<any> {
-  const room = await getRoom(id)
+export async function updateRoom(id: string, input: any, ownerID: string): Promise<any> {
+  const room = await getRoom(id, ownerID)
   validateRoom(input)
 
   // Go mempertahankan status lama jika status baru kosong/tidak dikenal.
@@ -116,19 +130,26 @@ export async function updateRoom(id: string, input: any): Promise<any> {
   }
 }
 
-export async function setRoomStatus(id: string, status: string): Promise<any> {
+export async function setRoomStatus(id: string, status: string, ownerID: string): Promise<any> {
   if (!allowedRoomStatus.includes(status)) throw badRequest('Status kamar tidak valid')
-  await getRoom(id)
+  await getRoom(id, ownerID)
   const row = await queryOne(`UPDATE rooms SET status=$1 WHERE id=$2 RETURNING *`, [status, id])
   if (!row) throw internal('Gagal memperbarui status kamar')
   return row
 }
 
-export async function deleteRoom(id: string): Promise<void> {
+export async function deleteRoom(id: string, ownerID: string): Promise<void> {
+  await getRoom(id, ownerID)
   const active = Number(
     (await scalar<number>(`SELECT count(*) FROM contracts WHERE kamar_id=$1 AND status='aktif'`, [id])) ?? 0,
   )
   if (active > 0) throw conflict('Kamar memiliki kontrak aktif dan tidak bisa dihapus')
-  const affected = await exec(`DELETE FROM rooms WHERE id=$1`, [id])
+  const args: unknown[] = [id]
+  let sql = `DELETE FROM rooms WHERE id=$1`
+  if (ownerID) {
+    sql += ` AND owner_id=$2`
+    args.push(ownerID)
+  }
+  const affected = await exec(sql, args)
   if (!affected) throw notFound('Kamar tidak ditemukan')
 }

@@ -90,7 +90,7 @@ export default function ContractsPage() {
         <form className="flex flex-wrap gap-3" onSubmit={(event) => { event.preventDefault(); setKeyword(search); setPage(1) }}>
           <div className="relative min-w-[220px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <Input className="pl-9" placeholder="Cari nomor kontrak atau penyewaâ€¦" value={search} onChange={(event) => setSearch(event.target.value)} />
+            <Input className="pl-9" placeholder="Cari nomor kontrak atau penyewa…" value={search} onChange={(event) => setSearch(event.target.value)} />
           </div>
           <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1) }} className="w-full sm:w-40">
             <option value="">Semua status</option><option value="aktif">Aktif</option>
@@ -112,8 +112,8 @@ export default function ContractsPage() {
                   {list.data!.items.map((contract) => (
                     <tr key={contract.id}>
                       <Td className="font-semibold text-slate-800">{contract.nomor_kontrak}</Td>
-                      <Td>{contract.nama_penyewa ?? 'â€”'}</Td>
-                      <Td><p>{contract.nomor_kamar ?? 'â€”'}</p><p className="text-xs text-slate-400">{contract.nama_properti ?? ''}</p></Td>
+                      <Td>{contract.nama_penyewa ?? '—'}</Td>
+                      <Td><p>{contract.nomor_kamar ?? '—'}</p><p className="text-xs text-slate-400">{contract.nama_properti ?? ''}</p></Td>
                       <Td><p className="whitespace-nowrap">{formatDate(contract.tanggal_mulai)}</p><p className="text-xs text-slate-400">s/d {formatDate(contract.tanggal_selesai)}</p></Td>
                       <Td className="font-semibold">{rupiah(contract.harga_sewa)}</Td>
                       <Td><StatusBadge status={contract.status} /></Td>
@@ -142,21 +142,21 @@ export default function ContractsPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editing ? 'Perpanjang Kontrak' : 'Buat Kontrak Baru'}
-        subtitle={editing ? `Kontrak ${editing.nomor_kontrak} Â· hanya tanggal selesai yang diperbarui` : 'Pastikan data penyewa dan kamar sudah tersedia.'}
+        subtitle={editing ? `Kontrak ${editing.nomor_kontrak} · hanya tanggal selesai yang diperbarui` : 'Pastikan data penyewa dan kamar sudah tersedia.'}
         size="lg"
         footer={<><Button variant="outline" onClick={() => setModalOpen(false)}>Batal</Button><Button loading={save.isPending} onClick={() => save.mutate()}>Simpan</Button></>}
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Penyewa" required>
             <Select value={form.penyewa_id} onChange={(event) => set('penyewa_id', event.target.value)} disabled={Boolean(editing)}>
-              <option value="">Pilih penyewaâ€¦</option>
+              <option value="">Pilih penyewa…</option>
               {(tenants.data?.items ?? []).map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.nama_lengkap}</option>)}
             </Select>
           </Field>
           <Field label="Kamar" required>
             <Select value={form.kamar_id} onChange={(event) => set('kamar_id', event.target.value)} disabled={Boolean(editing)}>
-              <option value="">Pilih kamarâ€¦</option>
-              {(rooms.data?.items ?? []).map((room) => <option key={room.id} value={room.id}>{room.nomor} Â· {room.nama_properti ?? ''} Â· {rupiah(room.harga_bulanan)}</option>)}
+              <option value="">Pilih kamar…</option>
+              {(rooms.data?.items ?? []).map((room) => <option key={room.id} value={room.id}>{room.nomor} · {room.nama_properti ?? ''} · {rupiah(room.harga_bulanan)}</option>)}
             </Select>
           </Field>
           <Field label="Tanggal mulai" required><Input type="date" value={form.tanggal_mulai} onChange={(event) => set('tanggal_mulai', event.target.value)} /></Field>

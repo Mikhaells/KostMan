@@ -3,7 +3,7 @@ import { config } from '@/lib/server/config'
 import { decrypt, encrypt, hashPassword, sha256 } from '@/lib/server/crypto'
 import { exec, query, queryOne, scalar, withTx } from '@/lib/server/db'
 import { badRequest, internal, notFound, toError, type Paginated, type Pagination } from '@/lib/server/http'
-import { json, optional, statusOrDefault, validEmail, validateNIK, validatePassword, validatePhone } from '@/lib/server/util'
+import { json, optional, scopeOwner, statusOrDefault, validEmail, validateNIK, validatePassword, validatePhone } from '@/lib/server/util'
 
 const allowedTenantStatus = ['aktif', 'nonaktif']
 
@@ -31,9 +31,15 @@ function decryptNik<T = any>(tenant: T): T {
   return tenant
 }
 
-export async function listTenants(q: Pagination, search: string, status: string): Promise<Paginated<any>> {
+export async function listTenants(
+  q: Pagination,
+  search: string,
+  status: string,
+  ownerID: string,
+): Promise<Paginated<any>> {
   const conditions: string[] = ['1=1']
   const args: unknown[] = []
+  scopeOwner(conditions, args, ownerID)
 
   if (search) {
     args.push(`%${search}%`)
@@ -52,8 +58,14 @@ export async function listTenants(q: Pagination, search: string, status: string)
   return { items: items.map((t) => decryptNik(t)), total }
 }
 
-export async function getTenant(id: string): Promise<any> {
-  const row = await queryOne(`SELECT * FROM tenants WHERE id=$1`, [id])
+export async function getTenant(id: string, ownerID = ''): Promise<any> {
+  const args: unknown[] = [id]
+  let sql = `SELECT * FROM tenants WHERE id=$1`
+  if (ownerID) {
+    sql += ` AND owner_id=$2`
+    args.push(ownerID)
+  }
+  const row = await queryOne(sql, args)
   if (!row) throw notFound('Penyewa tidak ditemukan')
   return decryptNik(row)
 }
@@ -64,7 +76,7 @@ export async function getTenantByUser(userID: string): Promise<any> {
   return decryptNik(row)
 }
 
-export async function createTenant(input: any): Promise<any> {
+export async function createTenant(input: any, ownerID: string): Promise<any> {
   validateTenant(input)
   if (String(input?.foto_ktp ?? '').trim() === '') {
     throw badRequest('Foto KTP wajib diunggah sebelum kontrak dibuat')
@@ -86,8 +98,8 @@ export async function createTenant(input: any): Promise<any> {
       let created: { id: string } | null = null
       try {
         created = await tx.one<{ id: string }>(
-          `INSERT INTO users (nama, email, password_hash, role, no_hp) VALUES ($1,$2,$3,'tenant',$4) RETURNING id`,
-          [input.nama_lengkap, email, hash, input.no_hp],
+          `INSERT INTO users (nama, email, password_hash, role, no_hp, owner_id) VALUES ($1,$2,$3,'tenant',$4,$5) RETURNING id`,
+          [input.nama_lengkap, email, hash, input.no_hp, ownerID || null],
         )
       } catch (error) {
         throw toError(error, 'Email sudah terdaftar sebagai user')
@@ -99,10 +111,11 @@ export async function createTenant(input: any): Promise<any> {
     let tenant: any
     try {
       tenant = await tx.one(
-        `INSERT INTO tenants (nama_lengkap, nik, nik_hash, email, no_hp, alamat_asal, pekerjaan,
+        `INSERT INTO tenants (owner_id, nama_lengkap, nik, nik_hash, email, no_hp, alamat_asal, pekerjaan,
           kontak_darurat_nama, kontak_darurat_hp, foto_ktp, dokumen_lain, status, user_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
         [
+          ownerID || null,
           String(input.nama_lengkap).trim(),
           encrypted,
           sha256(nik),
@@ -126,8 +139,8 @@ export async function createTenant(input: any): Promise<any> {
   })
 }
 
-export async function updateTenant(id: string, input: any): Promise<any> {
-  const old = await getTenant(id)
+export async function updateTenant(id: string, input: any, ownerID: string): Promise<any> {
+  const old = await getTenant(id, ownerID)
   validateTenant(input)
 
   const nik = String(input.nik).trim()
@@ -164,24 +177,33 @@ export async function updateTenant(id: string, input: any): Promise<any> {
   return decryptNik(tenant)
 }
 
-export async function setTenantStatus(id: string, status: string): Promise<any> {
+export async function setTenantStatus(id: string, status: string, ownerID: string): Promise<any> {
   if (status !== 'aktif' && status !== 'nonaktif') throw badRequest('Status tidak valid')
-  const row = await queryOne(`UPDATE tenants SET status=$1 WHERE id=$2 RETURNING *`, [status, id])
+  const args: unknown[] = [status, id]
+  let sql = `UPDATE tenants SET status=$1 WHERE id=$2`
+  if (ownerID) {
+    sql += ` AND owner_id=$3`
+    args.push(ownerID)
+  }
+  const row = await queryOne(`${sql} RETURNING *`, args)
   if (!row) throw notFound('Penyewa tidak ditemukan')
   return decryptNik(row)
 }
 
-export async function tenantHistory(tenantID: string): Promise<any[]> {
-  return query(
-    `SELECT c.*, r.nomor AS nomor_kamar, p.nama AS nama_properti
+export async function tenantHistory(tenantID: string, ownerID: string): Promise<any[]> {
+  const args: unknown[] = [tenantID]
+  let sql = `SELECT c.*, r.nomor AS nomor_kamar, p.nama AS nama_properti
      FROM contracts c JOIN rooms r ON r.id=c.kamar_id JOIN properties p ON p.id=r.properti_id
-     WHERE c.penyewa_id=$1 ORDER BY c.tanggal_mulai DESC`,
-    [tenantID],
-  )
+     WHERE c.penyewa_id=$1`
+  if (ownerID) {
+    sql += ` AND c.owner_id=$2`
+    args.push(ownerID)
+  }
+  return query(`${sql} ORDER BY c.tanggal_mulai DESC`, args)
 }
 
-export async function ensurePortalUser(tenantID: string, password: string): Promise<string> {
-  const tenant = await getTenant(tenantID)
+export async function ensurePortalUser(tenantID: string, password: string, ownerID: string): Promise<string> {
+  const tenant = await getTenant(tenantID, ownerID)
   if (tenant.user_id) return String(tenant.user_id)
 
   const plain = password || 'Kos12345'
@@ -191,8 +213,8 @@ export async function ensurePortalUser(tenantID: string, password: string): Prom
 
   try {
     await exec(
-      `INSERT INTO users (id, nama, email, password_hash, role, no_hp) VALUES ($1,$2,$3,$4,'tenant',$5)`,
-      [uid, tenant.nama_lengkap, tenant.email, hash, tenant.no_hp],
+      `INSERT INTO users (id, nama, email, password_hash, role, no_hp, owner_id) VALUES ($1,$2,$3,$4,'tenant',$5,$6)`,
+      [uid, tenant.nama_lengkap, tenant.email, hash, tenant.no_hp, ownerID || null],
     )
   } catch (error) {
     throw toError(error, 'Email sudah terdaftar sebagai user')

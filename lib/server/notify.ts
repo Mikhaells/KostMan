@@ -20,10 +20,14 @@ export async function notifyAdmins(
   isi: string,
   tipe: string,
   data: Record<string, unknown> = {},
+  ownerID = '',
 ): Promise<void> {
-  const ids = await query<{ id: string }>(
-    `SELECT id FROM users WHERE role IN ('owner','manager','super_admin') AND deleted_at IS NULL AND status='aktif'`,
-  )
+  // ownerID kosong = broadcast global (khusus super_admin). Jika diisi, hanya
+  // owner dan manager milik owner tersebut yang mendapat notifikasi.
+  const sql = ownerID
+    ? `SELECT id FROM users WHERE owner_id=$1 AND role IN ('owner','manager') AND deleted_at IS NULL AND status='aktif'`
+    : `SELECT id FROM users WHERE role IN ('owner','manager','super_admin') AND deleted_at IS NULL AND status='aktif'`
+  const ids = await query<{ id: string }>(sql, ownerID ? [ownerID] : [])
   await Promise.all(ids.map((row) => createNotification(row.id, judul, isi, tipe, data)))
 }
 

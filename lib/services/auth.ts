@@ -20,22 +20,27 @@ function publicUser(user: any) {
   return rest
 }
 
+/** Registrasi publik hanya membuat owner baru; owner_id diarahkan ke dirinya sendiri. */
 export async function register(input: any) {
+  const created = await insertAccount(input, 'owner', '')
+  await exec(`UPDATE users SET owner_id=$1 WHERE id=$1`, [created!.id])
+  return created
+}
+
+/** Akun manager/tenant dibuat oleh owner dan mewarisi owner_id. */
+async function insertAccount(input: any, role: string, ownerID: string) {
   const email = String(input?.email ?? '').trim().toLowerCase()
   const nama = String(input?.nama ?? '').trim()
   if (!nama || !validEmail(email)) throw badRequest('Nama dan email valid wajib diisi')
   validatePassword(String(input?.password ?? ''))
-  const role = input?.role || 'owner'
-  if (role !== 'owner' && role !== 'manager') throw badRequest('Registrasi hanya untuk owner atau manager')
   const hash = await hashPassword(String(input.password))
   try {
-    const row = await queryOne(
-      `INSERT INTO users (nama, email, password_hash, role, no_hp)
-       VALUES ($1,$2,$3,$4,$5)
+    return await queryOne<{ id: string; nama: string; email: string; role: string; no_hp: string | null; status: string; created_at: string; updated_at: string }>(
+      `INSERT INTO users (nama, email, password_hash, role, no_hp, owner_id)
+       VALUES ($1,$2,$3,$4,$5,$6)
        RETURNING id, nama, email, role, no_hp, status, created_at, updated_at`,
-      [nama, email, hash, role, optional(input?.no_hp)],
+      [nama, email, hash, role, optional(input?.no_hp), ownerID || null],
     )
-    return row
   } catch (error) {
     if (String((error as any)?.message).includes('duplicate')) throw conflict('Email sudah terdaftar')
     throw internal(String(error))
@@ -43,8 +48,8 @@ export async function register(input: any) {
 }
 
 async function issuePair(user: any): Promise<TokenPair> {
-  const access = await accessToken(user.id, user.role)
-  const refresh = await refreshToken(user.id, user.role)
+  const access = await accessToken(user.id, user.role, user.owner_id)
+  const refresh = await refreshToken(user.id, user.role, user.owner_id)
   const expires = new Date(Date.now() + config.refreshTtlSeconds * 1000)
   await exec(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1,$2,$3)`, [
     user.id,
@@ -98,8 +103,8 @@ export async function refresh(rawToken: string): Promise<TokenPair> {
   if (!valid) throw unauthorized('Refresh token tidak valid atau sudah kedaluwarsa')
   const user = await queryOne(`SELECT * FROM users WHERE id=$1 AND deleted_at IS NULL`, [claims.uid])
   if (!user) throw unauthorized('User tidak ditemukan')
-  const access = await accessToken(user.id, user.role)
-  const nextRefresh = await refreshToken(user.id, user.role)
+  const access = await accessToken(user.id, user.role, user.owner_id)
+  const nextRefresh = await refreshToken(user.id, user.role, user.owner_id)
   await withTx(async (tx) => {
     await tx.exec(`UPDATE refresh_tokens SET revoked=TRUE WHERE token_hash=$1`, [hash])
     await tx.exec(`INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1,$2,$3)`, [
@@ -180,24 +185,44 @@ export async function changePassword(userId: string, oldPassword: string, newPas
   await exec(`UPDATE users SET password_hash=$1 WHERE id=$2`, [hash, userId])
 }
 
-export async function listUsers(q: Pagination, search: string): Promise<Paginated<any>> {
+export async function listUsers(q: Pagination, search: string, ownerID: string): Promise<Paginated<any>> {
   const like = `%${search ?? ''}%`
-  const total = Number((await scalar<number>(`SELECT count(*) FROM users WHERE deleted_at IS NULL AND (nama ILIKE $1 OR email ILIKE $1)`, [like])) ?? 0)
+  const args: unknown[] = [like]
+  const scope = ownerID ? ` AND owner_id = $2` : ''
+  if (ownerID) args.push(ownerID)
+  const total = Number((await scalar<number>(
+    `SELECT count(*) FROM users WHERE deleted_at IS NULL AND (nama ILIKE $1 OR email ILIKE $1)${scope}`,
+    args,
+  )) ?? 0)
   const items = await query(
-    `SELECT * FROM users WHERE deleted_at IS NULL AND (nama ILIKE $1 OR email ILIKE $1)
-     ORDER BY created_at DESC LIMIT $2 OFFSET $3`,
-    [like, q.limit, q.offset],
+    `SELECT * FROM users WHERE deleted_at IS NULL AND (nama ILIKE $1 OR email ILIKE $1)${scope}
+     ORDER BY created_at DESC LIMIT $${args.length + 1} OFFSET $${args.length + 2}`,
+    [...args, q.limit, q.offset],
   )
   return { items: items.map(publicUser), total }
 }
 
-export async function createUser(input: any) {
-  return register({ ...input, role: input?.role || 'manager' })
+export async function createUser(input: any, ownerID: string) {
+  if (!ownerID) throw forbidden('Owner tidak dikenal')
+  const role = String(input?.role || 'manager')
+  if (!['manager', 'tenant'].includes(role)) throw badRequest('Role hanya boleh Manager atau Penyewa')
+  return insertAccount(input, role, ownerID)
 }
 
-export async function updateUser(id: string, input: any) {
-  const role = input?.role || 'manager'
-  if (!['owner', 'manager', 'super_admin', 'tenant'].includes(role)) throw badRequest('Role tidak valid')
+export async function updateUser(id: string, input: any, ownerID: string, actorID: string) {
+  const existing = await queryOne<{ role: string; owner_id: string | null }>(
+    `SELECT role, owner_id FROM users WHERE id=$1 AND deleted_at IS NULL`,
+    [id],
+  )
+  if (!existing || (ownerID && String(existing.owner_id) !== String(ownerID))) {
+    throw notFound('User tidak ditemukan')
+  }
+  if (id === actorID) throw badRequest('Gunakan menu profil untuk mengubah akun sendiri')
+  if (String(existing.role) === 'owner' || String(existing.role) === 'super_admin') {
+    throw forbidden('Akun owner/super admin tidak bisa diubah dari sini')
+  }
+  const role = String(input?.role || existing.role)
+  if (!['manager', 'tenant'].includes(role)) throw badRequest('Role hanya boleh Manager atau Penyewa')
   const status = input?.status || 'aktif'
   const row = await queryOne(`UPDATE users SET nama=$1, no_hp=$2, role=$3, status=$4 WHERE id=$5 RETURNING *`, [
     input?.nama,
@@ -210,7 +235,18 @@ export async function updateUser(id: string, input: any) {
   return publicUser(row)
 }
 
-export async function deleteUser(id: string): Promise<void> {
+export async function deleteUser(id: string, ownerID: string, actorID: string): Promise<void> {
+  if (id === actorID) throw badRequest('Tidak bisa menonaktifkan akun sendiri')
+  const existing = await queryOne<{ role: string; owner_id: string | null }>(
+    `SELECT role, owner_id FROM users WHERE id=$1 AND deleted_at IS NULL`,
+    [id],
+  )
+  if (!existing || (ownerID && String(existing.owner_id) !== String(ownerID))) {
+    throw notFound('User tidak ditemukan')
+  }
+  if (String(existing.role) === 'owner' || String(existing.role) === 'super_admin') {
+    throw forbidden('Akun owner/super admin tidak bisa dihapus dari sini')
+  }
   const affected = await exec(`UPDATE users SET deleted_at=now(), status='nonaktif' WHERE id=$1 AND deleted_at IS NULL`, [id])
   if (!affected) throw notFound('User tidak ditemukan')
 }

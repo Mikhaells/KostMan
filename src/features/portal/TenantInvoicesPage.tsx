@@ -70,7 +70,7 @@ export default function TenantInvoicesPage() {
                 {list.data!.items.map((invoice) => (
                   <tr key={invoice.id}>
                     <Td className="font-semibold text-slate-800">{invoice.nomor_invoice}</Td>
-                    <Td className="whitespace-nowrap text-xs">{formatDate(invoice.periode_mulai)} â€“ {formatDate(invoice.periode_selesai)}</Td>
+                    <Td className="whitespace-nowrap text-xs">{formatDate(invoice.periode_mulai)} – {formatDate(invoice.periode_selesai)}</Td>
                     <Td className="whitespace-nowrap">{formatDate(invoice.tanggal_jatuh_tempo)}</Td>
                     <Td className="font-semibold">{rupiah(invoice.total)}</Td>
                     <Td><StatusBadge status={invoice.status} /></Td>
@@ -98,7 +98,7 @@ export default function TenantInvoicesPage() {
         open={Boolean(paying)}
         onClose={() => setPaying(null)}
         title="Kirim Bukti Pembayaran"
-        subtitle={paying ? `${paying.nomor_invoice} Â· Total ${rupiah(paying.total)}` : undefined}
+        subtitle={paying ? `${paying.nomor_invoice} · Total ${rupiah(paying.total)}` : undefined}
         footer={<><Button variant="outline" onClick={() => setPaying(null)}>Batal</Button><Button loading={pay.isPending} disabled={!form.jumlah || !form.bukti_bayar} onClick={() => pay.mutate()}>Kirim Bukti</Button></>}
       >
         <div className="space-y-4">
@@ -115,7 +115,7 @@ export default function TenantInvoicesPage() {
           <Field label="Bukti bayar" required hint="JPG/PNG/PDF, maksimal 2MB">
             <Input type="file" accept="image/*,.pdf" onChange={(event) => handleUpload(event.target.files?.[0])} />
           </Field>
-          {uploading && <p className="text-xs text-brand-600">Mengunggah buktiâ€¦</p>}
+          {uploading && <p className="text-xs text-brand-600">Mengunggah bukti…</p>}
           {form.bukti_bayar && <p className="text-xs font-semibold text-emerald-600">âœ“ Bukti berhasil diunggah</p>}
         </div>
       </Modal>
@@ -124,7 +124,7 @@ export default function TenantInvoicesPage() {
         {detail && (
           <div className="space-y-4">
             <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
-              <div><p className="text-xs text-slate-500">Periode</p><p className="font-semibold">{formatDate(detail.periode_mulai)} â€“ {formatDate(detail.periode_selesai)}</p></div>
+              <div><p className="text-xs text-slate-500">Periode</p><p className="font-semibold">{formatDate(detail.periode_mulai)} – {formatDate(detail.periode_selesai)}</p></div>
               <div><p className="text-xs text-slate-500">Jatuh tempo</p><p className="font-semibold">{formatDate(detail.tanggal_jatuh_tempo)}</p></div>
               <div><p className="text-xs text-slate-500">Status</p><StatusBadge status={detail.status} /></div>
               <div><p className="text-xs text-slate-500">Properti</p><p className="font-semibold">{detail.nama_properti ?? '-'}</p></div>
