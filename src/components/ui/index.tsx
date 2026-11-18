@@ -1,7 +1,7 @@
-import { forwardRef, useSyncExternalStore, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import { forwardRef, useState, useSyncExternalStore, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Inbox, Info, Loader2, X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Eye, EyeOff, Inbox, Info, Loader2, X } from 'lucide-react'
 import { getToastSnapshot, subscribeToasts } from '../../lib/toast'
 
 export function cn(...inputs: ClassValue[]) {
@@ -53,6 +53,26 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   ref,
 ) {
   return <input ref={ref} className={cn('input-base', className)} {...props} />
+})
+
+export const PasswordInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function PasswordInput(
+  { className, ...props },
+  ref,
+) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="relative">
+      <Input ref={ref} type={show ? 'text' : 'password'} className={cn('pr-11', className)} {...props} />
+      <button
+        type="button"
+        onClick={() => setShow((value) => !value)}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+        aria-label={show ? 'Sembunyikan password' : 'Tampilkan password'}
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
+    </div>
+  )
 })
 
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(

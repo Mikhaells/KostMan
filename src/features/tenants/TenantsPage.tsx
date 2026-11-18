@@ -6,7 +6,7 @@ import { formatDate, rupiah } from '../../lib/format'
 import { toast } from '../../lib/toast'
 import {
   Badge, Button, Card, EmptyState, ErrorState, Field, Input, Loading, Modal, PageHeader,
-  Pagination, Select, StatusBadge, Table, Td, Textarea, Th,
+  Pagination, PasswordInput, Select, StatusBadge, Table, Td, Textarea, Th,
 } from '../../components/ui'
 import ImagePicker from '../../components/ui/ImagePicker'
 import type { Contract, Tenant } from '../../types'
@@ -190,7 +190,7 @@ export default function TenantsPage() {
                 </label>
               </div>
               {form.buat_akun_portal && (
-                <Field label="Password portal" hint="Kosongkan untuk password default"><Input type="password" value={form.password} onChange={(event) => set('password', event.target.value)} /></Field>
+                <Field label="Password portal" hint="Kosongkan untuk password default"><PasswordInput value={form.password} onChange={(event) => set('password', event.target.value)} /></Field>
               )}
             </>
           )}
@@ -228,7 +228,7 @@ export default function TenantsPage() {
         size="sm"
         footer={<><Button variant="outline" onClick={() => setPortalTenant(null)}>Batal</Button><Button loading={createPortal.isPending} onClick={() => createPortal.mutate()}>Buat Akun</Button></>}
       >
-        <Field label="Password" hint="Kosongkan untuk menggunakan password default"><Input type="password" value={portalPassword} onChange={(event) => setPortalPassword(event.target.value)} /></Field>
+        <Field label="Password" hint="Kosongkan untuk menggunakan password default"><PasswordInput value={portalPassword} onChange={(event) => setPortalPassword(event.target.value)} /></Field>
       </Modal>
     </>
   )

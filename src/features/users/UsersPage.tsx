@@ -6,7 +6,7 @@ import { formatDate, initials } from '../../lib/format'
 import { toast } from '../../lib/toast'
 import {
   Badge, Button, Card, ConfirmDialog, EmptyState, ErrorState, Field, Input, Loading, Modal,
-  PageHeader, Pagination, Select, Table, Td, Th,
+  PageHeader, Pagination, PasswordInput, Select, Table, Td, Th,
 } from '../../components/ui'
 import type { User } from '../../types'
 
@@ -137,7 +137,7 @@ export default function UsersPage() {
           <div className="space-y-4">
             <Field label="Nama" required><Input value={createForm.nama} onChange={(event) => setCreateForm((prev) => ({ ...prev, nama: event.target.value }))} /></Field>
             <Field label="Email" required><Input type="email" value={createForm.email} onChange={(event) => setCreateForm((prev) => ({ ...prev, email: event.target.value }))} /></Field>
-            <Field label="Password" required><Input type="password" value={createForm.password} onChange={(event) => setCreateForm((prev) => ({ ...prev, password: event.target.value }))} /></Field>
+            <Field label="Password" required><PasswordInput value={createForm.password} onChange={(event) => setCreateForm((prev) => ({ ...prev, password: event.target.value }))} /></Field>
             <Field label="No. HP"><Input value={createForm.no_hp} onChange={(event) => setCreateForm((prev) => ({ ...prev, no_hp: event.target.value }))} /></Field>
             <Field label="Role">
               <Select value={createForm.role} onChange={(event) => setCreateForm((prev) => ({ ...prev, role: event.target.value }))}>

@@ -4,7 +4,7 @@ import { api, errorMessage } from '../../lib/api'
 import { formatDate, initials } from '../../lib/format'
 import { toast } from '../../lib/toast'
 import { useAuthStore } from '../../store/auth'
-import { Badge, Button, Card, CardHeader, ErrorState, Field, Input, Loading, PageHeader } from '../../components/ui'
+import { Badge, Button, Card, CardHeader, ErrorState, Field, Input, Loading, PageHeader, PasswordInput } from '../../components/ui'
 import type { Tenant, User } from '../../types'
 
 export default function TenantProfilePage() {
@@ -70,10 +70,10 @@ export default function TenantProfilePage() {
           <Card>
             <CardHeader title="Ubah Password" subtitle="Gunakan password minimal 8 karakter." action={<Button size="sm" loading={savePassword.isPending} disabled={password.new_password !== password.confirm || !password.old_password || !password.new_password} onClick={() => savePassword.mutate()}>Ubah Password</Button>} />
             <div className="grid gap-4 p-5 sm:grid-cols-2">
-              <Field label="Password lama"><Input type="password" value={password.old_password} onChange={(event) => setPassword((prev) => ({ ...prev, old_password: event.target.value }))} /></Field>
+              <Field label="Password lama"><PasswordInput value={password.old_password} onChange={(event) => setPassword((prev) => ({ ...prev, old_password: event.target.value }))} /></Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Password baru"><Input type="password" value={password.new_password} onChange={(event) => setPassword((prev) => ({ ...prev, new_password: event.target.value }))} /></Field>
-                <Field label="Konfirmasi"><Input type="password" value={password.confirm} onChange={(event) => setPassword((prev) => ({ ...prev, confirm: event.target.value }))} /></Field>
+                <Field label="Password baru"><PasswordInput value={password.new_password} onChange={(event) => setPassword((prev) => ({ ...prev, new_password: event.target.value }))} /></Field>
+                <Field label="Konfirmasi"><PasswordInput value={password.confirm} onChange={(event) => setPassword((prev) => ({ ...prev, confirm: event.target.value }))} /></Field>
               </div>
             </div>
           </Card>

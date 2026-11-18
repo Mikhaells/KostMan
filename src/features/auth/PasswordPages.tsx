@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2, Mail, Send } from 'lucide-react'
 import { api, errorMessage } from '../../lib/api'
-import { Button, Field, Input } from '../../components/ui'
+import { Button, Field, Input, PasswordInput } from '../../components/ui'
 import AuthLayout from './AuthLayout'
 
 export function ForgotPasswordPage() {
@@ -75,10 +75,10 @@ export function ResetPasswordPage() {
         )}
         {!token && <p className="text-sm text-amber-700">Tautan reset tidak ditemukan. Gunakan tautan dari email reset Anda.</p>}
         <Field label="Password baru" required hint="Minimal 8 karakter, huruf + angka">
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
         </Field>
         <Field label="Konfirmasi password" required>
-          <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} minLength={8} required />
+          <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} minLength={8} required />
         </Field>
         <Button type="submit" className="w-full" loading={mutation.isPending}><Mail className="h-4 w-4" /> Simpan password</Button>
       </form>

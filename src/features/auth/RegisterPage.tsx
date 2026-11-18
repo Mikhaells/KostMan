@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query'
 import { AlertCircle, UserPlus } from 'lucide-react'
 import { api, errorMessage } from '../../lib/api'
 import type { User } from '../../types'
-import { Button, Field, Input, Select } from '../../components/ui'
+import { Button, Field, Input, PasswordInput, Select } from '../../components/ui'
 import AuthLayout from './AuthLayout'
 
 export default function RegisterPage() {
@@ -45,7 +45,7 @@ export default function RegisterPage() {
           </Select>
         </Field>
         <Field label="Password" required hint="Minimal 8 karakter, kombinasi huruf dan angka">
-          <Input type="password" value={form.password} onChange={(e) => set('password', e.target.value)} minLength={8} required />
+          <PasswordInput value={form.password} onChange={(e) => set('password', e.target.value)} minLength={8} required />
         </Field>
         <Button type="submit" className="w-full" loading={mutation.isPending}><UserPlus className="h-4 w-4" /> Daftar</Button>
       </form>

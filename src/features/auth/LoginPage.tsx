@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { AlertCircle, Eye, EyeOff, LogIn } from 'lucide-react'
+import { AlertCircle, LogIn } from 'lucide-react'
 import { api, errorMessage } from '../../lib/api'
 import { useAuthStore } from '../../store/auth'
 import type { LoginResponse } from '../../types'
-import { Button, Field, Input } from '../../components/ui'
+import { Button, Field, Input, PasswordInput } from '../../components/ui'
 import AuthLayout from './AuthLayout'
 
 export default function LoginPage() {
@@ -13,7 +13,6 @@ export default function LoginPage() {
   const setSession = useAuthStore((state) => state.setSession)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [show, setShow] = useState(false)
 
   const mutation = useMutation({
     mutationFn: () => api.post<LoginResponse>('/auth/login', { email, password }),
@@ -50,20 +49,13 @@ export default function LoginPage() {
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="nama@email.com" autoComplete="email" required />
         </Field>
         <Field label="Password" required>
-          <div className="relative">
-            <Input
-              type={show ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Masukkan password"
-              autoComplete="current-password"
-              className="pr-11"
-              required
-            />
-            <button type="button" onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Tampilkan password">
-              {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            </button>
-          </div>
+          <PasswordInput
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Masukkan password"
+            autoComplete="current-password"
+            required
+          />
         </Field>
         <div className="flex justify-end">
           <Link to="/forgot-password" className="text-sm font-medium text-brand-600 hover:underline">Lupa password?</Link>
