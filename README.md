@@ -142,6 +142,37 @@ cd backend && go test ./... -cover
 cd frontend && npm run lint && npm run build
 ```
 
+## Deploy tanpa kartu kredit: Zeabur + Neon ✅
+
+Kalau Anda tidak ingin memasukkan kartu (Render sekarang meminta verifikasi `$1`), pakai **Zeabur Free Plan** — dokumentasi resminya menyebut *"No credit card required — just sign up and start deploying"*. Database tetap di **Neon**.
+
+File `Dockerfile` di root sudah menangani semuanya: build Vite + Go, lalu Go menyajikan API **dan** SPA di satu container. Migrasi dan seed dijalankan otomatis saat container start (seed idempoten, jadi aman dijalankan ulang).
+
+### Langkah
+
+1. Buat project Neon dan salin connection string dengan `sslmode=require` (sama seperti langkah di bawah).
+2. Daftar di <https://zeabur.com> → **New Project** → **Deploy Service** → pilih repo GitHub `Mikhaells/KostMan`.
+3. Zeabur mendeteksi `Dockerfile` di root secara otomatis — tidak perlu mengubah build command.
+4. Di tab **Environment Variables**, tambahkan sebagai *secret*:
+   - `DATABASE_URL` = connection string Neon
+   - `APP_URL` = URL yang diberikan Zeabur (mis. `https://kosman.zeabur.app`)
+   - `JWT_SECRET`, `JWT_REFRESH_SECRET`, `ENCRYPTION_KEY` = string acak panjang
+   - `SMTP_FROM` = `KosMan <noreply@domain-anda.com>` (opsional)
+   - `RESEND_API_KEY`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_UPLOAD_PRESET` (opsional)
+5. Deploy → buka URL Zeabur → login `owner@kosman.id` / `Admin123`.
+
+Buat secret acak di PowerShell:
+
+```powershell
+-join ((1..64) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
+```
+
+### Keterbatasan Zeabur Free
+
+- Service **auto-sleep** saat idle dan bangun saat ada request (cold start beberapa detik).
+- Tidak ada SLA dan email bawaan Zeabur tidak tersedia — tapi email pakai Resend dan database Anda di Neon, jadi tidak terdampak.
+- Domain kustom tidak tersedia di plan Free; gunakan URL `*.zeabur.app`.
+
 ## Deploy gratis: Render + Neon
 
 Proyek ini sudah disiapkan untuk deploy sebagai **satu web service** di Render: Go melayani API **dan** SPA (`frontend/dist`), jadi tidak perlu hosting frontend terpisah. `render.yaml` di root sudah berisi blueprint-nya.
