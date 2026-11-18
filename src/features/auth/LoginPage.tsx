@@ -23,11 +23,6 @@ export default function LoginPage() {
     },
   })
 
-  const fillDemo = (demoEmail: string) => {
-    setEmail(demoEmail)
-    setPassword('Admin123')
-  }
-
   return (
     <AuthLayout
       title="Selamat datang kembali"
@@ -77,21 +72,6 @@ export default function LoginPage() {
           <LogIn className="h-4 w-4" /> Masuk
         </Button>
       </form>
-
-      <div className="mt-7 rounded-xl border border-dashed border-slate-300 bg-white p-4">
-        <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Akun demo (password: Admin123)</p>
-        <div className="flex flex-wrap gap-2">
-          {[
-            ['owner@kosman.id', 'Owner'],
-            ['manager@kosman.id', 'Manager'],
-            ['penyewa1@kosman.id', 'Penyewa'],
-          ].map(([mail, label]) => (
-            <button key={mail} onClick={() => fillDemo(mail)} className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-brand-50 hover:text-brand-700">
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
     </AuthLayout>
   )
 }
