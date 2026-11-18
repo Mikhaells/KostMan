@@ -70,6 +70,8 @@ npm start                       # jalankan build produksi di :3000
 
 ## Deploy gratis: Vercel Hobby + Neon
 
+> Panduan lengkap langkah demi langkah ada di [DEPLOY.md](./DEPLOY.md).
+
 ### 1. Neon (database, gratis tanpa kartu)
 
 1. Daftar di <https://neon.com>, buat project dan database.
@@ -113,7 +115,7 @@ npm start                       # jalankan build produksi di :3000
 
 ### 4. Cron / auto-billing
 
-`vercel.json` mendaftarkan dua scheduled job (Vercel Cron tersedia di semua plan, termasuk Hobby):
+`vercel.json` mendaftarkan dua scheduled job lewat **Vercel Schedules** (dulu bernama Cron Jobs, tersedia di semua plan termasuk Hobby):
 
 | Jadwal (UTC) | Endpoint | Tugas |
 | :--- | :--- | :--- |

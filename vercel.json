@@ -1,12 +1,15 @@
 {
-  "crons": [
-    {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "schedules": {
+    "kosman-daily": {
+      "schedule": "0 0 * * *",
       "path": "/api/cron/daily",
-      "schedule": "0 0 * * *"
+      "requestMethod": "GET"
     },
-    {
+    "kosman-monthly": {
+      "schedule": "0 0 1 * *",
       "path": "/api/cron/monthly",
-      "schedule": "0 0 1 * *"
+      "requestMethod": "GET"
     }
-  ]
+  }
 }
