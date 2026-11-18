@@ -66,6 +66,8 @@ npm run build                   # next build
 npm start                       # jalankan build produksi di :3000
 ```
 
+> Script di `package.json` memanggil binary lewat `node ./node_modules/...` secara eksplisit. Ini menghindari masalah shim `.cmd` npm di Windows ketika path folder mengandung karakter `&` (seperti `Sistem Manajemen Kos & Kontrakan`).
+
 ## Deploy gratis: Vercel Hobby + Neon
 
 ### 1. Neon (database, gratis tanpa kartu)
