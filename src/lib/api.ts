@@ -64,7 +64,7 @@ export async function apiList<T>(
 
 export function fileUrl(path?: string | null): string {
   if (!path) return ''
-  if (/^https?:\/\//.test(path)) return path
+  if (/^(https?:\/\/|data:|blob:)/i.test(path)) return path
   return baseURL.replace(/\/api\/v1\/?$/, '') + (path.startsWith('/') ? path : `/${path}`)
 }
 
@@ -80,9 +80,7 @@ export function errorMessage(error: unknown): string {
 export async function uploadFile(file: File): Promise<string> {
   const form = new FormData()
   form.append('file', file)
-  const res = await client.post<{ data: { url: string } }>('/upload', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  const res = await client.post<{ data: { url: string } }>('/upload', form)
   return res.data.data.url
 }
 

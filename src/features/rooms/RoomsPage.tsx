@@ -6,7 +6,7 @@ import { rupiah } from '../../lib/format'
 import { toast } from '../../lib/toast'
 import {
   Button, Card, ConfirmDialog, EmptyState, ErrorState, Field, Input, Loading, Modal, PageHeader,
-  Pagination, Select, StatusBadge, Table, Td, Th,
+  Pagination, RupiahInput, Select, StatusBadge, Table, Td, Th,
 } from '../../components/ui'
 import ImagePicker from '../../components/ui/ImagePicker'
 import { usePropertyOptions } from '../../hooks/useLookups'
@@ -188,9 +188,9 @@ export default function RoomsPage() {
           <Field label="Nomor kamar" required><Input value={form.nomor} onChange={(event) => set('nomor', event.target.value)} placeholder="A01" /></Field>
           <Field label="Tipe kamar" required><Input value={form.tipe} onChange={(event) => set('tipe', event.target.value)} placeholder="Standar / VIP" /></Field>
           <Field label="Luas (m²)"><Input type="number" value={form.luas_m2} onChange={(event) => set('luas_m2', event.target.value)} /></Field>
-          <Field label="Harga bulanan" required><Input type="number" value={form.harga_bulanan} onChange={(event) => set('harga_bulanan', event.target.value)} /></Field>
-          <Field label="Harga tahunan"><Input type="number" value={form.harga_tahunan} onChange={(event) => set('harga_tahunan', event.target.value)} /></Field>
-          <Field label="Deposit"><Input type="number" value={form.deposit} onChange={(event) => set('deposit', event.target.value)} /></Field>
+          <Field label="Harga bulanan" required><RupiahInput value={form.harga_bulanan} onValueChange={(value) => set('harga_bulanan', value)} /></Field>
+          <Field label="Harga tahunan"><RupiahInput value={form.harga_tahunan} onValueChange={(value) => set('harga_tahunan', value)} /></Field>
+          <Field label="Deposit"><RupiahInput value={form.deposit} onValueChange={(value) => set('deposit', value)} /></Field>
           <Field label="Status">
             <Select value={form.status} onChange={(event) => set('status', event.target.value)}>
               <option value="kosong">Kosong</option><option value="terisi">Terisi</option>

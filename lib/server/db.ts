@@ -118,6 +118,8 @@ async function prepare(): Promise<void> {
 }
 
 async function seedIfEmpty(client: PoolClient): Promise<void> {
+  const skip = await client.query(`SELECT 1 FROM kosman_schema_migrations WHERE name='skip_seed'`)
+  if (skip.rowCount) return
   const count = await client.query('SELECT count(*)::int AS n FROM users')
   if (Number(count.rows[0]?.n ?? 0) > 0) return
 

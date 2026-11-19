@@ -2,11 +2,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarRange, Download, FilePlus2, Pencil, Search } from 'lucide-react'
 import { api, apiList, downloadFile, errorMessage } from '../../lib/api'
-import { addMonthsISO, formatDate, rupiah, todayISO } from '../../lib/format'
+import { addDaysISO, addMonthsISO, formatDate, rupiah, todayISO } from '../../lib/format'
 import { toast } from '../../lib/toast'
 import {
   Button, Card, ConfirmDialog, EmptyState, ErrorState, Field, Input, Loading, Modal, PageHeader,
-  Pagination, Select, StatusBadge, Table, Td, Textarea, Th,
+  Pagination, RupiahInput, Select, StatusBadge, Table, Td, Textarea, Th,
 } from '../../components/ui'
 import { useRoomOptions, useTenantOptions } from '../../hooks/useLookups'
 import type { Contract } from '../../types'
@@ -42,12 +42,17 @@ export default function ContractsPage() {
 
   useEffect(() => {
     if (!modalOpen) return
-    setForm(editing ? {
+    if (!editing) {
+      setForm(makeEmptyForm())
+      return
+    }
+    const tanggal_mulai = addDaysISO(editing.tanggal_selesai.slice(0, 10), 1)
+    setForm({
       penyewa_id: editing.penyewa_id, kamar_id: editing.kamar_id,
-      tanggal_mulai: editing.tanggal_mulai.slice(0, 10), tanggal_selesai: editing.tanggal_selesai.slice(0, 10),
+      tanggal_mulai, tanggal_selesai: '',
       harga_sewa: String(editing.harga_sewa), deposit: String(editing.deposit ?? 0),
       deposit_dibayar: editing.deposit_dibayar, catatan: editing.catatan ?? '',
-    } : makeEmptyForm())
+    })
   }, [modalOpen, editing])
 
   const save = useMutation({
@@ -142,7 +147,7 @@ export default function ContractsPage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editing ? 'Perpanjang Kontrak' : 'Buat Kontrak Baru'}
-        subtitle={editing ? `Kontrak ${editing.nomor_kontrak} · hanya tanggal selesai yang diperbarui` : 'Pastikan data penyewa dan kamar sudah tersedia.'}
+        subtitle={editing ? `Kontrak ${editing.nomor_kontrak} · mulai hari setelah kontrak lama berakhir, pilih tanggal selesai baru` : 'Pastikan data penyewa dan kamar sudah tersedia.'}
         size="lg"
         footer={<><Button variant="outline" onClick={() => setModalOpen(false)}>Batal</Button><Button loading={save.isPending} onClick={() => save.mutate()}>Simpan</Button></>}
       >
@@ -159,10 +164,14 @@ export default function ContractsPage() {
               {(rooms.data?.items ?? []).map((room) => <option key={room.id} value={room.id}>{room.nomor} · {room.nama_properti ?? ''} · {rupiah(room.harga_bulanan)}</option>)}
             </Select>
           </Field>
-          <Field label="Tanggal mulai" required><Input type="date" value={form.tanggal_mulai} onChange={(event) => set('tanggal_mulai', event.target.value)} /></Field>
-          <Field label="Tanggal selesai" required><Input type="date" value={form.tanggal_selesai} onChange={(event) => set('tanggal_selesai', event.target.value)} /></Field>
-          <Field label="Harga sewa" required><Input type="number" value={form.harga_sewa} onChange={(event) => set('harga_sewa', event.target.value)} /></Field>
-          <Field label="Deposit"><Input type="number" value={form.deposit} onChange={(event) => set('deposit', event.target.value)} /></Field>
+          <Field label="Tanggal mulai" required hint={editing ? 'Otomatis hari setelah kontrak lama berakhir' : undefined}>
+            <Input type="date" value={form.tanggal_mulai} disabled={Boolean(editing)} onChange={(event) => set('tanggal_mulai', event.target.value)} />
+          </Field>
+          <Field label="Tanggal selesai" required>
+            <Input type="date" value={form.tanggal_selesai} min={editing ? addDaysISO(form.tanggal_mulai, 1) : undefined} onChange={(event) => set('tanggal_selesai', event.target.value)} />
+          </Field>
+          <Field label="Harga sewa" required><RupiahInput value={form.harga_sewa} onValueChange={(value) => set('harga_sewa', value)} /></Field>
+          <Field label="Deposit"><RupiahInput value={form.deposit} onValueChange={(value) => set('deposit', value)} /></Field>
           <div className="flex items-end pb-2 sm:col-span-2">
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input type="checkbox" className="h-4 w-4 accent-brand-600" checked={form.deposit_dibayar} onChange={(event) => set('deposit_dibayar', event.target.checked)} />

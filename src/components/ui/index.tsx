@@ -55,6 +55,32 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
   return <input ref={ref} className={cn('input-base', className)} {...props} />
 })
 
+type RupiahInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type' | 'inputMode'> & {
+  value: string
+  onValueChange: (value: string) => void
+}
+
+export const RupiahInput = forwardRef<HTMLInputElement, RupiahInputProps>(function RupiahInput(
+  { className, value, onValueChange, ...props },
+  ref,
+) {
+  const display = value ? Number(value).toLocaleString('id-ID') : ''
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">Rp</span>
+      <Input
+        ref={ref}
+        type="text"
+        inputMode="numeric"
+        className={cn('pl-9', className)}
+        value={display}
+        onChange={(event) => onValueChange(event.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, ''))}
+        {...props}
+      />
+    </div>
+  )
+})
+
 export const PasswordInput = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(function PasswordInput(
   { className, ...props },
   ref,
